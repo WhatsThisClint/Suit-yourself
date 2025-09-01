@@ -1,0 +1,2144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Site Suitability Analyzer</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    
+    <script src="https://unpkg.com/lucide@0.378.0/dist/umd/lucide.min.js"></script>
+    <style>
+        /* Use Inter font family */
+        body {
+            font-family: 'Inter', sans-serif;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+        
+        /* Custom CSS Variables */
+        :root {
+            --primary-color: #4f46e5; /* indigo-600 */
+            --primary-light: #818cf8; /* indigo-400 */
+            --success-color: #10b981; /* emerald-500 */
+            --warning-color: #f59e0b; /* amber-500 */
+            --danger-color: #ef4444; /* red-500 */
+            --dark-bg: #1e293b; /* slate-800 */
+            --light-bg: #f8fafc; /* slate-50 */
+        }
+        
+        /* Enhanced button styles */
+        .action-button {
+            @apply inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-semibold rounded-md shadow-sm transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed;
+            background-color: var(--primary-color);
+            color: white;
+        }
+        
+        .action-button:hover {
+            background-color: var(--primary-light);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+        
+        .action-button-secondary {
+            @apply inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-semibold rounded-md shadow-sm transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-offset-2;
+            background-color: white;
+            color: var(--dark-bg);
+            border: 1px solid #e2e8f0;
+        }
+        
+        .action-button-secondary:hover {
+            background-color: var(--light-bg);
+        }
+        
+        /* Enhanced card styles */
+        .info-card {
+            @apply bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden;
+            transition: all 0.2s ease;
+        }
+        
+        .info-card:hover {
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+        
+        /* Custom Leaflet Control Styles */
+        .leaflet-control-layers-overlays label { 
+            display: flex; 
+            align-items: center; 
+            font-size: 14px;
+        }
+        .layer-style-icon { 
+            cursor: pointer; 
+            margin-left: 8px; 
+            transition: transform 0.2s ease;
+        }
+        .layer-style-icon:hover { transform: scale(1.2); }
+        
+        /* Enhanced map controls */
+        .leaflet-control-layers {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(4px);
+            border-radius: 8px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+        
+        .leaflet-control-zoom {
+            border: none !important;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+        
+        .leaflet-control-zoom a {
+            background-color: white !important;
+            color: var(--primary-color) !important;
+            border: none !important;
+            border-radius: 4px !important;
+            width: 32px !important;
+            height: 32px !important;
+            line-height: 32px !important;
+        }
+        
+        .leaflet-control-zoom a:hover {
+            background-color: var(--light-bg) !important;
+        }
+        
+        /* Custom scrollbar for a cleaner look */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f5f9; } /* slate-100 */
+        ::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 10px; } /* slate-400 */
+        ::-webkit-scrollbar-thumb:hover { background: #64748b; } /* slate-500 */
+        
+        /* Main layout fixes */
+        .main-container {
+            display: flex;
+            height: 100vh;
+            width: 100vw;
+            overflow: hidden;
+        }
+        
+        #map-container {
+            flex-grow: 1;
+            position: relative;
+            height: 100%;
+        }
+        
+        #map {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            width: 100%;
+            height: 100%;
+        }
+        
+        /* Right sidebar - completely hidden by default */
+        #right-sidebar {
+            position: absolute;
+            top: 0;
+            right: 0;
+            height: 100%;
+            width: 0;
+            min-width: 0;
+            background-color: white;
+            border-left: 1px solid #e2e8f0;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            z-index: 1100; /* Increased to be above map panes */
+            overflow: hidden;
+            transition: width 0.3s ease-in-out, min-width 0.3s ease-in-out;
+            display: flex; /* Use flexbox for layout */
+            flex-direction: column; /* Stack children vertically */
+        }
+        
+        /* When active, show the sidebar */
+        #right-sidebar.active {
+            width: 350px;
+            min-width: 350px;
+        }
+        
+        /* Ensure the map resizes properly when sidebar is shown/hidden */
+        .leaflet-container {
+            width: 100%;
+            height: 100%;
+        }
+        
+        /* Responsive Layout */
+        @media (max-width: 768px) {
+            .main-container {
+                flex-direction: column;
+            }
+            
+            #left-sidebar {
+                width: 100%;
+                min-width: 100%;
+                height: auto;
+                max-height: 40vh;
+                border-right: none;
+                border-bottom: 1px solid #e2e8f0;
+            }
+            
+            #right-sidebar.active {
+                width: 100%;
+                min-width: 100%;
+                height: 50vh;
+                top: auto;
+                bottom: 0;
+                border-left: none;
+                border-top: 1px solid #e2e8f0;
+            }
+            
+            .action-button, .action-button-secondary {
+                padding: 8px 12px;
+                font-size: 12px;
+            }
+            
+            .stats-panel {
+                display: none; /* Hide stats panel on mobile to save space */
+            }
+            
+            /* Mobile-optimized map controls */
+            .leaflet-control-container .leaflet-top.leaflet-right {
+                top: 10px;
+                right: 10px;
+            }
+            
+            .leaflet-control-container .leaflet-bottom.leaflet-right {
+                bottom: 10px;
+                right: 10px;
+            }
+        }
+        
+        /* Touch-Friendly Interface */
+        @media (hover: none) {
+            .action-button, .action-button-secondary {
+                min-height: 44px; /* Recommended minimum touch target size */
+            }
+            
+            .leaflet-control-layers {
+                font-size: 16px; /* Larger text for better readability */
+            }
+            
+            .leaflet-control-layers-base label, 
+            .leaflet-control-layers-overlays label {
+                padding: 8px;
+            }
+        }
+    </style>
+</head>
+<body class="bg-slate-100 text-slate-800">
+    <div id="onboarding-tour" class="hidden fixed inset-0 bg-black/70 z-[10003] flex items-center justify-center">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-md p-6">
+            <h2 class="text-xl font-bold text-slate-800 mb-4">Welcome to Site Suitability Analyzer</h2>
+            <div class="space-y-4 mb-6">
+                <div class="flex items-start space-x-3">
+                    <div class="bg-indigo-100 p-2 rounded-full">
+                        <i data-lucide="map-pin" class="w-5 h-5 text-indigo-600"></i>
+                    </div>
+                    <div>
+                        <h3 class="font-semibold">1. Upload Location Data</h3>
+                        <p class="text-sm text-slate-600">Start by uploading your Excel or CSV file with location coordinates</p>
+                    </div>
+                </div>
+                <div class="flex items-start space-x-3">
+                    <div class="bg-indigo-100 p-2 rounded-full">
+                        <i data-lucide="layers" class="w-5 h-5 text-indigo-600"></i>
+                    </div>
+                    <div>
+                        <h3 class="font-semibold">2. Add Map Layers</h3>
+                        <p class="text-sm text-slate-600">Enhance your analysis with GeoJSON layers</p>
+                    </div>
+                </div>
+                <div class="flex items-start space-x-3">
+                    <div class="bg-indigo-100 p-2 rounded-full">
+                        <i data-lucide="brain-circuit" class="w-5 h-5 text-indigo-600"></i>
+                    </div>
+                    <div>
+                        <h3 class="font-semibold">3. Analyze & Export</h3>
+                        <p class="text-sm text-slate-600">Use analysis tools and export your results</p>
+                    </div>
+                </div>
+            </div>
+            <div class="flex justify-between">
+                <button id="skip-tour" class="text-slate-500 hover:text-slate-700">Skip</button>
+                <button id="start-tour" class="action-button bg-indigo-600 text-white">Get Started</button>
+            </div>
+        </div>
+    </div>
+    
+    <div id="loader" class="hidden fixed inset-0 bg-white/80 backdrop-blur-sm flex flex-col justify-center items-center z-[10000]">
+        <div class="w-16 h-16 border-4 border-slate-200 border-t-indigo-600 rounded-full animate-spin"></div>
+        <p id="loader-text" class="mt-4 text-lg font-semibold text-slate-700">Loading...</p>
+        <div id="progress-container" class="hidden w-full max-w-xs mt-4">
+            <div class="w-full bg-slate-200 rounded-full h-2.5">
+                <div id="progress-bar" class="bg-indigo-600 h-2.5 rounded-full transition-all duration-300" style="width: 0%"></div>
+            </div>
+            <div class="text-xs text-slate-500 mt-1 text-center"><span id="progress-text">0</span>%</div>
+        </div>
+    </div>
+    
+    <div id="toast-container" class="fixed top-5 right-5 z-[10001] flex flex-col items-end space-y-2"></div>
+    
+    <div id="modals-container">
+        <div id="analysis-modal" class="hidden fixed inset-0 bg-black/60 z-[10002] flex justify-center items-center p-4" 
+             role="dialog" aria-modal="true" aria-labelledby="analysis-modal-title">
+            <div class="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col transform scale-95 opacity-0 transition-all duration-300">
+                <div class="flex justify-between items-center p-4 border-b border-slate-200">
+                    <div class="flex items-center space-x-2">
+                        <i data-lucide="brain-circuit" class="text-indigo-600" aria-hidden="true"></i>
+                        <h2 id="analysis-modal-title" class="text-lg font-bold text-slate-800">AI Map Analysis</h2>
+                    </div>
+                    <button class="modal-close p-1 rounded-full hover:bg-slate-100" aria-label="Close dialog">
+                        <i data-lucide="x" class="w-5 h-5 text-slate-500" aria-hidden="true"></i>
+                    </button>
+                </div>
+                <div id="analysis-result" class="p-6 text-slate-600 leading-relaxed overflow-y-auto" role="document"></div>
+            </div>
+        </div>
+        
+        <div id="style-editor-modal" class="hidden fixed inset-0 bg-black/60 z-[10002] flex justify-center items-center p-4">
+            <div class="bg-white rounded-xl shadow-2xl w-full max-w-md max-h-[90vh] flex flex-col transform scale-95 opacity-0 transition-all duration-300">
+                <div class="flex justify-between items-center p-4 border-b border-slate-200">
+                    <h2 id="style-editor-title" class="text-lg font-bold text-slate-800">Style Layer</h2>
+                    <button class="modal-close p-1 rounded-full hover:bg-slate-100"><i data-lucide="x" class="w-5 h-5 text-slate-500"></i></button>
+                </div>
+                <div id="style-editor-body" class="p-6 space-y-4"></div>
+            </div>
+        </div>
+        
+        <div id="field-config-modal" class="hidden fixed inset-0 bg-black/60 z-[10002] flex justify-center items-center p-4">
+            <div class="bg-white rounded-xl shadow-2xl w-full max-w-xl max-h-[90vh] flex flex-col transform scale-95 opacity-0 transition-all duration-300">
+                <div class="flex justify-between items-center p-4 border-b border-slate-200">
+                     <h2 class="text-lg font-bold text-slate-800">Configure Display Fields</h2>
+                    <button class="modal-close p-1 rounded-full hover:bg-slate-100"><i data-lucide="x" class="w-5 h-5 text-slate-500"></i></button>
+                </div>
+                <div id="field-config-body" class="p-6 overflow-y-auto"></div>
+            </div>
+        </div>
+        
+        <div id="layer-select-modal" class="hidden fixed inset-0 bg-black/60 z-[10002] flex justify-center items-center p-4">
+            <div class="bg-white rounded-xl shadow-2xl w-full max-w-md max-h-[90vh] flex flex-col transform scale-95 opacity-0 transition-all duration-300">
+                 <div class="flex justify-between items-center p-4 border-b border-slate-200">
+                    <h2 class="text-lg font-bold text-slate-800">Select Layer for Analysis</h2>
+                    <button class="modal-close p-1 rounded-full hover:bg-slate-100"><i data-lucide="x" class="w-5 h-5 text-slate-500"></i></button>
+                </div>
+                <div id="layer-select-body" class="p-6"></div>
+                <div class="p-4 bg-slate-50 border-t border-slate-200 flex justify-end">
+                    <button id="layer-select-confirm" class="action-button bg-indigo-600 text-white">Confirm</button>
+                </div>
+            </div>
+        </div>
+        
+        <div id="validation-confirm-modal" class="hidden fixed inset-0 bg-black/60 z-[10002] flex justify-center items-center p-4">
+            <div class="bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col transform scale-95 opacity-0 transition-all duration-300">
+                <div class="flex justify-between items-center p-4 border-b border-slate-200">
+                    <h2 class="text-lg font-bold text-slate-800">Automated Validation</h2>
+                    <button class="modal-close p-1 rounded-full hover:bg-slate-100"><i data-lucide="x" class="w-5 h-5 text-slate-500"></i></button>
+                </div>
+                <div class="p-6 text-slate-600">
+                    <p>Distance calculation is complete. Would you like to use these distances to automatically validate the points (set Green, Amber, Red status)?</p>
+                </div>
+                <div class="p-4 bg-slate-50 border-t border-slate-200 flex justify-end space-x-3">
+                    <button id="validation-confirm-no" class="action-button bg-slate-500 text-white">No, Thanks</button>
+                    <button id="validation-confirm-yes" class="action-button bg-emerald-600 text-white">Yes, Set Thresholds</button>
+                </div>
+            </div>
+        </div>
+        
+        <div id="threshold-modal" class="hidden fixed inset-0 bg-black/60 z-[10002] flex justify-center items-center p-4">
+            <div class="bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col transform scale-95 opacity-0 transition-all duration-300">
+                <div class="flex justify-between items-center p-4 border-b border-slate-200">
+                    <h2 class="text-lg font-bold text-slate-800">Set Validation Thresholds (meters)</h2>
+                    <button class="modal-close p-1 rounded-full hover:bg-slate-100"><i data-lucide="x" class="w-5 h-5 text-slate-500"></i></button>
+                </div>
+                <div class="p-6">
+                    <p class="text-slate-600 mb-4">Define the distance ranges for each status. Points are classified based on their distance to the nearest stream.</p>
+                    <div class="space-y-4">
+                        <div class="flex items-center space-x-3">
+                            <label for="threshold-green" class="w-32 font-semibold text-emerald-600 flex items-center"><i data-lucide="check-circle-2" class="mr-2"></i>Green:</label>
+                            <input type="number" id="threshold-green" placeholder="e.g., 100 (less than or equal to)" class="w-full form-input">
+                        </div>
+                        <div class="flex items-center space-x-3">
+                            <label for="threshold-amber" class="w-32 font-semibold text-amber-500 flex items-center"><i data-lucide="alert-triangle" class="mr-2"></i>Amber:</label>
+                            <input type="number" id="threshold-amber" placeholder="e.g., 500 (less than or equal to)" class="w-full form-input">
+                        </div>
+                         <div class="flex items-center space-x-3">
+                            <label class="w-32 font-semibold text-red-500 flex items-center"><i data-lucide="x-circle" class="mr-2"></i>Red:</label>
+                            <span class="text-slate-500">Anything greater than Amber</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="p-4 bg-slate-50 border-t border-slate-200 flex justify-end">
+                    <button id="threshold-apply" class="action-button bg-indigo-600 text-white">Apply Validation</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ADDED: Configuration Confirmation Modal -->
+        <div id="config-confirm-modal" class="hidden fixed inset-0 bg-black/60 z-[10002] flex justify-center items-center p-4">
+            <div class="bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col transform scale-95 opacity-0 transition-all duration-300">
+                <div class="flex justify-between items-center p-4 border-b border-slate-200">
+                    <h2 class="text-lg font-bold text-slate-800">Data Loaded</h2>
+                    <button class="modal-close p-1 rounded-full hover:bg-slate-100"><i data-lucide="x" class="w-5 h-5 text-slate-500"></i></button>
+                </div>
+                <div class="p-6 text-slate-600">
+                    <p>Your data has been loaded successfully. Would you like to configure which fields are displayed in the details panel before plotting the points on the map?</p>
+                </div>
+                <div class="p-4 bg-slate-50 border-t border-slate-200 flex justify-end space-x-3">
+                    <button id="config-confirm-no" class="action-button bg-slate-500 text-white">No, Plot Now</button>
+                    <button id="config-confirm-yes" class="action-button bg-indigo-600 text-white">Yes, Configure</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="main-container">
+        <div id="left-sidebar" class="w-[350px] min-w-[350px] bg-white border-r border-slate-200 flex flex-col shadow-lg z-20">
+            <div class="p-4 border-b border-slate-200">
+                <h1 class="text-xl font-bold text-slate-800">Site Suitability</h1>
+                <p class="text-sm text-slate-500">Analyzer</p>
+            </div>
+            
+            <div id="step-indicator" class="hidden p-4 border-b border-slate-200">
+                </div>
+            
+            <div class="flex-grow p-4 overflow-y-auto space-y-6">
+                <div class="space-y-2">
+                    <label class="text-sm font-bold text-slate-600">1. Location Data</label>
+                    <label for="location-file-input" class="group w-full p-3 border-2 border-dashed border-slate-300 rounded-lg flex flex-col items-center justify-center cursor-pointer hover:border-indigo-500 hover:bg-indigo-50 transition-colors">
+                        <i data-lucide="upload-cloud" class="w-8 h-8 text-slate-400 group-hover:text-indigo-600"></i>
+                        <span id="location-file-display" class="mt-2 text-sm text-slate-500 text-center">Select Location File (.xlsx, .csv)</span>
+                    </label>
+                    <input type="file" id="location-file-input" class="hidden" accept=".xlsx,.xls,.csv">
+                    <button id="plot-button" class="action-button w-full bg-indigo-600 text-white" disabled>
+                        <i data-lucide="map-pin"></i><span>Plot Data</span>
+                    </button>
+                </div>
+                <div class="space-y-2">
+                    <label class="text-sm font-bold text-slate-600">2. Vector Layers</label>
+                    <label for="geojson-file-input" class="action-button w-full bg-slate-600 text-white">
+                        <i data-lucide="layers"></i><span>Add GeoJSON Layer(s)</span>
+                    </label>
+                    <input type="file" id="geojson-file-input" class="hidden" accept=".geojson,.json" multiple>
+                </div>
+                <div>
+                    <label class="text-sm font-bold text-slate-600">Search Locations</label>
+                    <div class="flex space-x-2 mt-2">
+                        <select id="search-field" class="form-input w-2/5" disabled><option>Field</option></select>
+                        <div class="relative w-3/5">
+                            <i data-lucide="search" class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400"></i>
+                            <input type="search" id="search-input" placeholder="Search..." class="form-input w-full pl-9" disabled list="search-suggestions">
+                            <datalist id="search-suggestions"></datalist>
+                        </div>
+                    </div>
+                </div>
+                <div>
+                    <label class="text-sm font-bold text-slate-600">Analysis Tools</label>
+                    <div class="grid grid-cols-2 gap-2 mt-2">
+                        <button id="calculate-distance-button" class="action-button-secondary" disabled title="Calculate distance from points to the nearest feature in a GeoJSON layer">
+                            <i data-lucide="ruler"></i><span>Distance</span>
+                        </button>
+                        <button id="analyze-button" class="action-button-secondary" title="Use AI to analyze the visible map area">
+                            <i data-lucide="brain-circuit"></i><span>AI Analyze</span>
+                        </button>
+                        <button id="insights-button" class="action-button-secondary" title="Get insights from your data">
+                            <i data-lucide="pie-chart"></i><span>Dashboard</span>
+                        </button>
+                         <button id="config-fields-button" class="action-button-secondary" title="Configure display fields">
+                            <i data-lucide="settings-2"></i><span>Fields</span>
+                        </button>
+                    </div>
+                </div>
+                 <button id="export-csv" class="action-button w-full bg-emerald-600 text-white">
+                    <i data-lucide="download"></i><span>Export to CSV</span>
+                </button>
+            </div>
+            <div id="stats-panel" class="p-4 border-t border-slate-200"></div>
+        </div>
+        
+        <div id="map-container">
+            <div id="map"></div>
+        </div>
+        
+        <div id="right-sidebar">
+            </div>
+    </div>
+    
+    <div id="dashboard-view" class="hidden fixed inset-0 bg-slate-100 z-[2000] flex flex-col">
+        <div id="dashboard-header" class="bg-white p-4 border-b border-slate-200 flex items-center gap-4 flex-wrap flex-shrink-0">
+            <h2 class="text-xl font-bold text-slate-800">Analytics Dashboard</h2>
+            <div class="flex items-center gap-4 flex-wrap">
+                <div class="flex items-center gap-2">
+                    <label for="dimension-select" class="text-sm font-medium">Group By:</label>
+                    <select id="dimension-select" class="form-input"></select>
+                </div>
+                <div class="flex items-center gap-2">
+                    <label for="segment-select" class="text-sm font-medium">Segment By:</label>
+                    <select id="segment-select" class="form-input"></select>
+                </div>
+                <div class="flex items-center gap-2">
+                    <label for="chart-type-select" class="text-sm font-medium">Chart Type:</label>
+                    <select id="chart-type-select" class="form-input">
+                        <option value="bar">Bar</option>
+                        <option value="pie">Pie</option>
+                        <option value="doughnut">Doughnut</option>
+                    </select>
+                </div>
+                <button id="generate-chart-btn" class="action-button bg-emerald-600 text-white"><i data-lucide="plus"></i><span>Add Chart</span></button>
+            </div>
+            <button id="back-to-map-btn" class="action-button bg-slate-600 text-white ml-auto"><i data-lucide="arrow-left"></i><span>Back to Map</span></button>
+        </div>
+        <div id="chart-grid" class="flex-grow p-6 overflow-y-auto grid gap-6 grid-cols-1 lg:grid-cols-2 xl:grid-cols-3"></div>
+    </div>
+    
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/papaparse@5.4.1/papaparse.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src='https://unpkg.com/@turf/turf@6/turf.min.js'></script>
+    <script type="module">
+        // --- Tailwind Config ---
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                }
+            },
+            plugins: [
+                // Add form plugin for better default input styles
+                function({ addComponents }) {
+                    addComponents({
+                        '.form-input': {
+                            '@apply block w-full px-3 py-2 bg-white border border-slate-300 rounded-md text-sm shadow-sm placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 disabled:bg-slate-50 disabled:text-slate-500 disabled:border-slate-200 disabled:shadow-none': {},
+                        },
+                        '.action-button': {
+                            '@apply inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-semibold rounded-md shadow-sm transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed': {},
+                        },
+                         '.action-button-secondary': {
+                            '@apply inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-semibold rounded-md shadow-sm transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-offset-2 bg-white text-slate-700 border border-slate-300 hover:bg-slate-50': {},
+                        },
+                    })
+                }
+            ]
+        }
+        
+        // --- Lazy Loading Utility ---
+        const LazyMapLoader = {
+            loadGeoJsonLayer: (map, file, callback) => {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    try {
+                        // Use requestIdleCallback for non-critical loading
+                        requestIdleCallback(() => {
+                            const geoJsonData = JSON.parse(e.target.result);
+                            callback(null, geoJsonData);
+                        }, { timeout: 1000 });
+                    } catch (error) {
+                        callback(error);
+                    }
+                };
+                reader.readAsText(file);
+            }
+        };
+        
+        // --- Debounce Utility ---
+        const debounce = (func, delay) => {
+            let timeout;
+            return function() {
+                const context = this;
+                const args = arguments;
+                clearTimeout(timeout);
+                timeout = setTimeout(() => func.apply(context, args), delay);
+            };
+        };
+        
+        // --- State Management ---
+        const State = (() => {
+            let points = [];
+            let rawLocationData = null;
+            let currentIndex = -1;
+            let locationFile = null;
+            let fieldConfig = null;
+            let currentFilter = 'All';
+            let geojsonLayersData = new Map();
+            return {
+                setPoints: (newPoints) => { points = newPoints; currentIndex = -1; },
+                getPoints: () => points,
+                getPointById: (id) => points.find(p => p.id === id),
+                updatePointStatus: (id, newStatus) => { const point = points.find(p => p.id === id); if (point) point.ragStatus = newStatus; },
+                updatePointData: (pointId, recordIndex, key, value) => {
+                    const point = points.find(p => p.id === pointId);
+                    if (point && point.originalData[recordIndex]) {
+                        point.originalData[recordIndex][key] = value;
+                    }
+                },
+                addDistanceToAllRecords(pointId, distance) {
+                    const point = this.getPointById(pointId);
+                    if (point) {
+                        point.originalData.forEach(record => {
+                            record['distance_to_stream_m'] = distance;
+                        });
+                    }
+                },
+                setRawLocationData: (data) => { rawLocationData = data; },
+                getRawLocationData: () => rawLocationData,
+                findNextUnvalidated: () => {
+                    const currentPoint = points[currentIndex];
+                    let nextIndex = -1;
+                    if (currentPoint) {
+                        for (let i = currentIndex + 1; i < points.length; i++) { if (points[i].ragStatus === 'Unvalidated') { nextIndex = i; break; } }
+                    }
+                    if (nextIndex === -1) { nextIndex = points.findIndex(p => p.ragStatus === 'Unvalidated'); }
+                    if (nextIndex !== -1) { currentIndex = nextIndex; return points[nextIndex]; }
+                    return null;
+                },
+                findNextInFilter: () => {
+                    const filter = currentFilter;
+                    if (filter === 'All' || filter === 'Unvalidated' || !points.some(p => p.ragStatus === filter)) return null;
+
+                    let searchIndex = currentIndex;
+                    if (searchIndex === -1) searchIndex = points.length - 1; 
+
+                    for (let i = 0; i < points.length; i++) {
+                        searchIndex = (searchIndex + 1) % points.length;
+                        if (points[searchIndex].ragStatus === filter) {
+                            currentIndex = searchIndex;
+                            return points[searchIndex];
+                        }
+                    }
+                    return null;
+                },
+                findPreviousInFilter: () => {
+                    const filter = currentFilter;
+                    if (filter === 'All' || filter === 'Unvalidated' || !points.some(p => p.ragStatus === filter)) return null;
+
+                    let searchIndex = currentIndex;
+                    if (searchIndex === -1) searchIndex = 0;
+
+                    for (let i = 0; i < points.length; i++) {
+                        searchIndex = (searchIndex - 1 + points.length) % points.length;
+                        if (points[searchIndex].ragStatus === filter) {
+                            currentIndex = searchIndex;
+                            return points[searchIndex];
+                        }
+                    }
+                    return null;
+                },
+                searchPoint: (field, query) => {
+                    const lowerCaseQuery = query.toLowerCase();
+                    for (const point of points) {
+                        for (const record of point.originalData) {
+                            if (record[field] && String(record[field]).toLowerCase().includes(lowerCaseQuery)) {
+                                return point;
+                            }
+                        }
+                    }
+                    return null;
+                },
+                setCurrentIndexById: (id) => { currentIndex = points.findIndex(p => p.id === id); },
+                getCurrentIndex: () => currentIndex,
+                setLocationFile: (file) => { locationFile = file; },
+                getLocationFile: () => locationFile,
+                setFieldConfig: (config) => { fieldConfig = config; },
+                getFieldConfig: () => fieldConfig,
+                setCurrentFilter: (filter) => { currentFilter = filter; },
+                getCurrentFilter: () => currentFilter,
+                addGeoJsonData: (name, data) => geojsonLayersData.set(name, data),
+                getGeoJsonData: (name) => geojsonLayersData.get(name),
+                getAllGeoJsonData: () => geojsonLayersData,
+                hasGeoJsonData: () => geojsonLayersData.size > 0,
+            };
+        })();
+        
+        // --- Data Parser ---
+        const DataParser = (() => {
+            return {
+                parseLocationData: (jsonData) => {
+                    if (!jsonData || jsonData.length === 0) return null;
+                    const uniqueLocations = new Map();
+                    const firstRowKeys = Object.keys(jsonData[0]);
+
+                    // Using a list of common aliases to find coordinate columns.
+                    // This is more robust than a strict regex and handles various CSV formats.
+                    const LAT_ALIASES = ['latitude', 'lat', 'y', 'ycenter', 'latitude (deg)', 'lat.'];
+                    const LON_ALIASES = ['longitude', 'long', 'lon', 'lng', 'x', 'xcenter', 'longitude (deg)', 'long.'];
+
+                    const latKey = firstRowKeys.find(k => LAT_ALIASES.includes(k.toLowerCase().trim()));
+                    const lonKey = firstRowKeys.find(k => LON_ALIASES.includes(k.toLowerCase().trim()));
+                    
+                    if (!latKey || !lonKey) {
+                        UIController.showToast("Error: Could not find Latitude/Longitude columns. Please ensure columns are named 'lat', 'lon', 'latitude', or 'longitude'.", "error");
+                        return null;
+                    }
+                    
+                    const validStatuses = ['Green', 'Amber', 'Red', 'Unvalidated', 'Not Required'];
+                    jsonData.forEach((row) => {
+                        if (!row.hasOwnProperty('User_Comment')) {
+                            row['User_Comment'] = '';
+                        }
+                        const ragStatus = row.hasOwnProperty('validation_status') && validStatuses.includes(row.validation_status)
+                            ? row.validation_status
+                            : 'Unvalidated';
+                        const lat = parseFloat(row[latKey]);
+                        const lon = parseFloat(row[lonKey]);
+                        if (!isNaN(lat) && !isNaN(lon)) {
+                            const coordKey = `${lat.toFixed(6)},${lon.toFixed(6)}`;
+                            if (uniqueLocations.has(coordKey)) {
+                                uniqueLocations.get(coordKey).originalData.push(row);
+                            } else {
+                                uniqueLocations.set(coordKey, {
+                                    id: `point-${uniqueLocations.size}`, latitude: lat, longitude: lon,
+                                    ragStatus: ragStatus, originalData: [row], mapMarker: null
+                                });
+                            }
+                        } else { console.warn(`Skipping row due to invalid lat/lon.`, row); }
+                    });
+                    return Array.from(uniqueLocations.values());
+                }
+            };
+        })();
+        
+        // --- Analysis Controllers (Distance & Charting) ---
+        const AnalysisController = (() => {
+            const calculateAndStoreDistance = (layerName) => {
+                const points = State.getPoints();
+                const layerData = State.getGeoJsonData(layerName);
+                UIController.showLoader(`Calculating distances to ${layerName}...`, 0);
+                if (!layerData || !layerData.features) {
+                    UIController.showToast("Selected layer has no features.", "error");
+                    UIController.hideLoader();
+                    return;
+                }
+                
+                const streamFeatures = turf.featureCollection(layerData.features);
+                let processedCount = 0;
+                
+                points.forEach((point, index) => {
+                    setTimeout(() => {
+                        const turfPoint = turf.point([point.longitude, point.latitude]);
+                        let nearestDistance = Infinity;
+                        turf.featureEach(streamFeatures, (feature) => {
+                            const geom = turf.getGeom(feature);
+                            
+                            if (geom.type === 'LineString') {
+                                const distance = turf.pointToLineDistance(turfPoint, feature, { units: 'meters' });
+                                if (distance < nearestDistance) {
+                                    nearestDistance = distance;
+                                }
+                            } else if (geom.type === 'MultiLineString') {
+                                geom.coordinates.forEach(lineCoords => {
+                                    const lineSegment = turf.lineString(lineCoords);
+                                    const distance = turf.pointToLineDistance(turfPoint, lineSegment, { units: 'meters' });
+                                    if (distance < nearestDistance) {
+                                        nearestDistance = distance;
+                                    }
+                                });
+                            }
+                        });
+                        
+                        const roundedDistance = nearestDistance === Infinity ? -1 : Math.round(nearestDistance);
+                        State.addDistanceToAllRecords(point.id, roundedDistance);
+                        
+                        processedCount++;
+                        const progress = Math.round((processedCount / points.length) * 100);
+                        UIController.updateLoaderProgress(progress);
+                        
+                        if (processedCount === points.length) {
+                            const fieldConfig = State.getFieldConfig();
+                            if (fieldConfig && !fieldConfig['distance_to_stream_m']) {
+                                fieldConfig['distance_to_stream_m'] = { display: true, editable: false };
+                                State.setFieldConfig(fieldConfig);
+                            }
+                            UIController.hideLoader();
+                            UIController.showToast("Distance calculation complete.", "success");
+                            document.dispatchEvent(new CustomEvent('distanceCalculated'));
+                        }
+                    }, index * 10); // Stagger processing to avoid blocking UI
+                });
+            };
+            
+            const applyValidation = (thresholds) => {
+                const points = State.getPoints();
+                points.forEach(point => {
+                    const distance = point.originalData[0]['distance_to_stream_m'];
+                    if (distance === -1 || distance === undefined) return;
+                    if (distance <= thresholds.green) {
+                        State.updatePointStatus(point.id, 'Green');
+                    } else if (distance <= thresholds.amber) {
+                        State.updatePointStatus(point.id, 'Amber');
+                    } else {
+                        State.updatePointStatus(point.id, 'Red');
+                    }
+                });
+                UIController.showToast("Validation statuses applied.", "success");
+                document.dispatchEvent(new CustomEvent('validationApplied'));
+            };
+            return {
+                startDistanceWorkflow: () => {
+                    const allGeoJsonLayers = State.getAllGeoJsonData();
+                    if (State.getPoints().length === 0) {
+                        UIController.showToast("Please plot points first.", "error");
+                        return;
+                    }
+                    if (allGeoJsonLayers.size === 0) {
+                        UIController.showToast("Please load a GeoJSON layer first.", "error");
+                        return;
+                    }
+                    const layerNames = Array.from(allGeoJsonLayers.keys());
+                    if (layerNames.length === 1) {
+                        calculateAndStoreDistance(layerNames[0]);
+                    } else {
+                        UIController.showLayerSelectModal(layerNames, (selectedLayer) => {
+                            if (selectedLayer) {
+                                calculateAndStoreDistance(selectedLayer);
+                            }
+                        });
+                    }
+                },
+                startValidationWorkflow: () => {
+                    UIController.showValidationConfirmModal((useForValidation) => {
+                        if (useForValidation) {
+                            UIController.showThresholdModal((thresholds) => {
+                                if (thresholds) {
+                                    applyValidation(thresholds);
+                                }
+                            });
+                        }
+                    });
+                }
+            };
+        })();
+        
+        const AnalyticsController = (() => {
+            const activeCharts = new Map();
+            const generateRandomColors = (numColors) => {
+                const colors = [];
+                for (let i = 0; i < numColors; i++) {
+                    const r = Math.floor(Math.random() * 200);
+                    const g = Math.floor(Math.random() * 200);
+                    const b = Math.floor(Math.random() * 200);
+                    colors.push(`rgba(${r}, ${g}, ${b}, 0.7)`);
+                }
+                return colors;
+            };
+            const getOrCreate = (map, key, factory) => {
+                if (!map.has(key)) {
+                    map.set(key, factory());
+                }
+                return map.get(key);
+            };
+            return {
+                createChart: (canvas, data, dimensionCol, segmentCol, chartType) => {
+                    const ctx = canvas.getContext('2d');
+                    let chartConfig;
+                    if (segmentCol === 'none') {
+                        // Simple chart (Bar, Pie, Doughnut)
+                        const counts = {};
+                        data.forEach(row => {
+                            const value = row[dimensionCol] === null || row[dimensionCol] === undefined ? 'N/A' : String(row[dimensionCol]);
+                            counts[value] = (counts[value] || 0) + 1;
+                        });
+                        const labels = Object.keys(counts);
+                        const values = Object.values(counts);
+                        const colors = generateRandomColors(labels.length);
+                        chartConfig = {
+                            type: chartType === 'stacked-bar' ? 'bar' : chartType, // fallback for simple chart
+                            data: {
+                                labels: labels,
+                                datasets: [{
+                                    label: `Count of ${dimensionCol}`,
+                                    data: values,
+                                    backgroundColor: colors,
+                                }]
+                            },
+                            options: {
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                plugins: {
+                                    legend: {
+                                        position: chartType === 'bar' ? 'none' : 'top',
+                                    }
+                                }
+                            }
+                        };
+                    } else {
+                        // Segmented / Stacked Bar Chart
+                        const nestedData = new Map();
+                        const segmentLabels = new Set();
+                        data.forEach(row => {
+                            const dimValue = row[dimensionCol] === null || row[dimensionCol] === undefined ? 'N/A' : String(row[dimensionCol]);
+                            const segValue = row[segmentCol] === null || row[segmentCol] === undefined ? 'N/A' : String(row[segmentCol]);
+                            segmentLabels.add(segValue);
+                            const dimMap = getOrCreate(nestedData, dimValue, () => new Map());
+                            const segCount = getOrCreate(dimMap, segValue, () => 0);
+                            dimMap.set(segValue, segCount + 1);
+                        });
+                        const dimensionLabels = Array.from(nestedData.keys());
+                        const sortedSegmentLabels = Array.from(segmentLabels).sort();
+                        const colors = generateRandomColors(sortedSegmentLabels.length);
+                        const colorMap = new Map(sortedSegmentLabels.map((label, i) => [label, colors[i]]));
+                        const datasets = sortedSegmentLabels.map(segLabel => {
+                            return {
+                                label: segLabel,
+                                data: dimensionLabels.map(dimLabel => nestedData.get(dimLabel).get(segLabel) || 0),
+                                backgroundColor: colorMap.get(segLabel),
+                            };
+                        });
+                        
+                        chartConfig = {
+                            type: 'bar',
+                            data: {
+                                labels: dimensionLabels,
+                                datasets: datasets
+                            },
+                            options: {
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                scales: {
+                                    x: { stacked: chartType === 'stacked-bar' },
+                                    y: { stacked: chartType === 'stacked-bar', beginAtZero: true }
+                                },
+                                plugins: {
+                                    legend: { position: 'top' }
+                                }
+                            }
+                        };
+                    }
+                    const newChart = new Chart(ctx, chartConfig);
+                    activeCharts.set(canvas.id, newChart);
+                    return true;
+                },
+                removeChart: (canvasId) => {
+                    if (activeCharts.has(canvasId)) {
+                        activeCharts.get(canvasId).destroy();
+                        activeCharts.delete(canvasId);
+                    }
+                },
+                clearAllCharts: () => {
+                    activeCharts.forEach(chart => chart.destroy());
+                    activeCharts.clear();
+                }
+            };
+        })();
+        
+        // --- Exporter ---
+        const Exporter = (() => {
+            return {
+                exportToCSV: (points) => {
+                    if (!points || points.length === 0) return;
+                    const dataForCSV = [];
+                    points.forEach(point => {
+                        point.originalData.forEach(originalRow => {
+                            dataForCSV.push({ ...originalRow, validation_status: point.ragStatus });
+                        });
+                    });
+                    const csv = Papa.unparse(dataForCSV);
+                    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+                    const link = document.createElement("a");
+                    link.href = URL.createObjectURL(blob);
+                    link.download = "site_suitability_report.csv";
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                }
+            };
+        })();
+        
+        // --- Map View ---
+        const MapView = (() => {
+            let pointLayerGroup = null;
+            let layerControl = null; 
+            let geojsonLayers = new Map();
+            let mapInstance = null;
+            
+            const createIcon = (color, isSelected = false, stackCount = 1) => {
+                const size = isSelected ? 44 : 36;
+                const strokeWidth = isSelected ? 2.5 : 1.5;
+                
+                const badgeHtml = stackCount > 1 
+                    ? `<g transform="translate(22, 4)">
+                           <circle r="8" fill="#ef4444" stroke="white" stroke-width="2"/>
+                           <text y="1" font-family="Inter, sans-serif" font-size="10" font-weight="bold" fill="white" text-anchor="middle" dominant-baseline="middle">${stackCount}</text>
+                       </g>` 
+                    : '';
+                    
+                const markerHtml = `
+                    <svg viewBox="0 0 36 36" width="${size}" height="${size}" xmlns="http://www.w3.org/2000/svg" style="overflow: visible;">
+                        <g transform="translate(6, 6)">
+                            <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" fill="${color}" stroke="#1e293b" stroke-width="${strokeWidth}"/>
+                        </g>
+                        ${badgeHtml}
+                    </svg>`;
+                    
+                return L.divIcon({ 
+                    html: markerHtml, 
+                    className: '',
+                    iconSize: [size, size], 
+                    iconAnchor: [size / 2, size],
+                    popupAnchor: [0, -size] 
+                });
+            };
+
+            const iconColors = {
+                Unvalidated: '#3b82f6', // blue-500
+                Green: '#22c55e',       // green-500
+                Amber: '#f59e0b',       // amber-500
+                Red: '#ef4444',         // red-500
+                'Not Required': '#64748b' // slate-500
+            };
+            const generateIcons = (stackCount) => ({
+                Unvalidated: createIcon(iconColors.Unvalidated, false, stackCount),
+                Green: createIcon(iconColors.Green, false, stackCount),
+                Amber: createIcon(iconColors.Amber, false, stackCount),
+                Red: createIcon(iconColors.Red, false, stackCount),
+                'Not Required': createIcon(iconColors['Not Required'], false, stackCount)
+            });
+            const generateSelectedIcons = (stackCount) => ({
+                Unvalidated: createIcon(iconColors.Unvalidated, true, stackCount),
+                Green: createIcon(iconColors.Green, true, stackCount),
+                Amber: createIcon(iconColors.Amber, true, stackCount),
+                Red: createIcon(iconColors.Red, true, stackCount),
+                'Not Required': createIcon(iconColors['Not Required'], true, stackCount)
+            });
+            let selectedMarker = null;
+            const _updateAllStyleIcons = () => {
+                const container = layerControl.getContainer();
+                if (!container) return;
+                const overlays = container.querySelector('.leaflet-control-layers-overlays');
+                const labels = overlays.getElementsByTagName('label');
+                for (const label of labels) {
+                    const span = label.querySelector('span');
+                    if (span) {
+                        const layerName = span.textContent.trim();
+                        if (geojsonLayers.has(layerName)) {
+                            const existingIcon = span.querySelector('.layer-style-icon');
+                            if (!existingIcon) {
+                                const styleIcon = document.createElement('i');
+                                styleIcon.className = 'layer-style-icon text-indigo-600';
+                                styleIcon.dataset.lucide = 'palette';
+                                styleIcon.dataset.layerName = layerName;
+                                span.appendChild(styleIcon);
+                                lucide.createIcons();
+                            }
+                        }
+                    }
+                }
+            };
+            
+            // Function to resize map when sidebar is toggled
+            const resizeMap = () => {
+                if (mapInstance) {
+                    setTimeout(() => {
+                        mapInstance.invalidateSize();
+                    }, 300);
+                }
+            };
+            
+            return {
+                initializeMap: () => {
+                    const map = L.map('map', { zoomControl: false }).setView([20.5937, 78.9629], 5);
+                    L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+                    // ADDED: Scale control to the bottom left of the map
+                    L.control.scale({ position: 'bottomleft' }).addTo(map);
+                    
+                    const baseLayers = {
+                        "Street": L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> contributors' }).addTo(map),
+                        "Satellite": L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { attribution: 'Tiles &copy; Esri' }),
+                        "Topographic": L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}', { attribution: 'Tiles &copy; Esri' }),
+                        // ADDED: Jawg Terrain basemap with user's access token.
+                        "Jawg Terrain": L.tileLayer('https://{s}.tile.jawg.io/jawg-terrain/{z}/{x}/{y}{r}.png?access-token=Z6SqfhfwQJy34ED7OucR0998i7TD7gkjACRWUE6kONCja1wsup45EUuJB2gPRoqI', { 
+                            attribution: '<a href="https://jawg.io" title="Tiles Courtesy of Jawg Maps" target="_blank">&copy; JawgMaps</a> &copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> contributors' 
+                        })
+                    };
+                    layerControl = L.control.layers(baseLayers, {}, { position: 'topright' }).addTo(map);
+                    
+                    pointLayerGroup = L.featureGroup();
+                    map.addLayer(pointLayerGroup);
+                    
+                    map.on('overlayadd overlayremove', _updateAllStyleIcons);
+                    mapInstance = map;
+                    return map;
+                },
+                addGeoJsonLayer: (map, geoJsonData, layerName) => {
+                    try {
+                        const defaultStyle = { color: "#f97316", weight: 2, opacity: 1, fillOpacity: 0.5 }; // orange-500
+                        const geoJsonLayer = L.geoJSON(geoJsonData, { style: defaultStyle });
+                        
+                        geojsonLayers.set(layerName, geoJsonLayer);
+                        State.addGeoJsonData(layerName, geoJsonData);
+                        layerControl.addOverlay(geoJsonLayer, layerName);
+                        geoJsonLayer.addTo(map);
+                        setTimeout(_updateAllStyleIcons, 100);
+                        
+                        UIController.showToast(`Layer "${layerName}" added.`, 'success');
+                        UIController.updateDistanceButtonState();
+                    } catch (error) {
+                        console.error("Error adding GeoJSON layer:", error);
+                        UIController.showToast(`Failed to add layer: ${layerName}`, 'error');
+                    }
+                },
+                updateGeoJsonStyle: (layerName, newStyle) => {
+                    if (geojsonLayers.has(layerName)) {
+                        const layer = geojsonLayers.get(layerName);
+                        layer.setStyle(newStyle);
+                        layer.options.style = newStyle;
+                    }
+                },
+                getGeoJsonLayerStyle: (layerName) => {
+                    if (geojsonLayers.has(layerName)) {
+                        const layer = geojsonLayers.get(layerName);
+                        return layer.options.style;
+                    }
+                    return { color: '#f97316', opacity: 1, fillOpacity: 0.5 };
+                },
+                plotPoints: (map, pointsData, onMarkerClick) => {
+                    pointLayerGroup.clearLayers();
+                    selectedMarker = null;
+                    const markers = [];
+                    pointsData.forEach(point => {
+                        const stackCount = point.originalData.length;
+                        const marker = L.marker([point.latitude, point.longitude], { icon: generateIcons(stackCount)[point.ragStatus] });
+                        marker.pointId = point.id;
+                        marker.on('click', () => onMarkerClick(marker.pointId));
+                        point.mapMarker = marker;
+                        markers.push(marker);
+                    });
+                    
+                    markers.forEach(marker => {
+                        pointLayerGroup.addLayer(marker);
+                    });
+
+                    if (pointsData.length > 0) {
+                         map.fitBounds(pointLayerGroup.getBounds().pad(0.1));
+                    }
+                    UIController.updateDistanceButtonState();
+                },
+                updateMarker: (marker, newStatus, isSelected, stackCount) => {
+                    if (!marker) return;
+                    const iconSet = isSelected ? generateSelectedIcons(stackCount) : generateIcons(stackCount);
+                    if (iconSet[newStatus]) marker.setIcon(iconSet[newStatus]);
+                },
+                // MODIFIED: Renamed from panToPoint and updated to use flyTo for pan and zoom.
+                panAndZoomToPoint: (map, point) => { 
+                    if (point && point.mapMarker) {
+                        map.flyTo([point.latitude, point.longitude], 16, {
+                            animate: true,
+                            duration: 1 // in seconds
+                        });
+                    }
+                },
+                setSelectedMarker: (point) => {
+                    if (selectedMarker) {
+                        const oldPoint = State.getPointById(selectedMarker.pointId);
+                        if (oldPoint) MapView.updateMarker(selectedMarker, oldPoint.ragStatus, false, oldPoint.originalData.length);
+                    }
+                    selectedMarker = point.mapMarker;
+                    MapView.updateMarker(selectedMarker, point.ragStatus, true, point.originalData.length);
+                },
+                getGeoJsonLayer: (layerName) => geojsonLayers.get(layerName),
+                resizeMap: resizeMap
+            };
+        })();
+        
+        // --- UI Controller ---
+        const UIController = (() => {
+            const container = document.querySelector('.main-container');
+            const dashboardView = document.getElementById('dashboard-view');
+            const rightSidebar = document.getElementById('right-sidebar');
+            const statsPanel = document.getElementById('stats-panel');
+            const loader = document.getElementById('loader');
+            const loaderText = document.getElementById('loader-text');
+            const progressContainer = document.getElementById('progress-container');
+            const progressBar = document.getElementById('progress-bar');
+            const progressText = document.getElementById('progress-text');
+            const distanceButton = document.getElementById('calculate-distance-button');
+            
+            let chartIdCounter = 0;
+            const showModal = (modal) => {
+                modal.classList.remove('hidden');
+                setTimeout(() => modal.querySelector('.transform').classList.remove('scale-95', 'opacity-0'), 10);
+            };
+            const closeModal = (modal) => {
+                modal.querySelector('.transform').classList.add('scale-95', 'opacity-0');
+                setTimeout(() => modal.classList.add('hidden'), 300);
+            };
+            
+            return {
+                showModal,
+                closeModal,
+                showStepIndicator: () => {
+                    const stepIndicatorContainer = document.getElementById('step-indicator');
+                    stepIndicatorContainer.innerHTML = ''; // Clear previous indicator to prevent duplicates
+
+                    const steps = [
+                        { id: 'upload', label: 'Upload Data', completed: !!State.getLocationFile() },
+                        { id: 'plot', label: 'Plot Points', completed: State.getPoints().length > 0 },
+                        { id: 'analyze', label: 'Analyze', completed: false } // This is a placeholder for future steps
+                    ];
+                    
+                    const indicatorHtml = `
+                        <div class="flex items-center justify-between">
+                            ${steps.map((step, index) => `
+                                <div class="flex items-center ${index < steps.length - 1 ? 'flex-1' : ''}">
+                                    <div class="w-8 h-8 rounded-full flex items-center justify-center ${step.completed ? 'bg-emerald-500 text-white' : 'bg-slate-200 text-slate-500'} transition-colors">
+                                        ${step.completed ? '<i data-lucide="check" class="w-4 h-4"></i>' : index + 1}
+                                    </div>
+                                    <span class="ml-2 text-sm font-medium ${step.completed ? 'text-emerald-600' : 'text-slate-500'} transition-colors">${step.label}</span>
+                                </div>
+                                ${index < steps.length - 1 ? `<div class="flex-1 h-0.5 mx-2 ${steps[index + 1].completed ? 'bg-emerald-500' : 'bg-slate-200'} transition-colors"></div>` : ''}
+                            `).join('')}
+                        </div>
+                    `;
+                    
+                    stepIndicatorContainer.innerHTML = indicatorHtml;
+                    lucide.createIcons();
+                    
+                    stepIndicatorContainer.classList.remove('hidden');
+                },
+                initializeUI: (callbacks) => {
+                    // Onboarding tour listeners
+                    document.getElementById('skip-tour').addEventListener('click', () => {
+                        document.getElementById('onboarding-tour').classList.add('hidden');
+                        localStorage.setItem('tourCompleted', 'true');
+                    });
+                    
+                    document.getElementById('start-tour').addEventListener('click', () => {
+                        document.getElementById('onboarding-tour').classList.add('hidden');
+                        localStorage.setItem('tourCompleted', 'true');
+                    });
+                    
+                    // Main button listeners
+                    document.getElementById('export-csv').addEventListener('click', callbacks.onExportClick);
+                    document.getElementById('analyze-button').addEventListener('click', callbacks.onAnalyzeClick);
+                    document.getElementById('insights-button').addEventListener('click', callbacks.onInsightsClick);
+                    document.getElementById('config-fields-button').addEventListener('click', callbacks.onConfigFieldsClick);
+                    distanceButton.addEventListener('click', callbacks.onCalculateDistanceClick);
+                    document.getElementById('location-file-input').addEventListener('change', (e) => { const file = e.target.files[0]; if (file) { document.getElementById('location-file-display').textContent = file.name; callbacks.onLocationFileSelect(file); } });
+                    document.getElementById('geojson-file-input').addEventListener('change', (e) => { if (e.target.files.length > 0) { callbacks.onGeoJsonFileSelect(e.target.files); e.target.value = ''; } }); 
+                    document.getElementById('plot-button').addEventListener('click', callbacks.onPlotClick);
+                    
+                    // Stats panel listeners
+                    statsPanel.addEventListener('click', (e) => { 
+                        const statsRow = e.target.closest('.stats-row');
+                        if (statsRow && statsRow.dataset.status) {
+                            callbacks.onStatusFilterClick(statsRow.dataset.status);
+                        }
+                    });
+                    
+                    // Layer control listener for style icon
+                    const layerControlContainer = document.querySelector('.leaflet-control-layers');
+                    if (layerControlContainer) {
+                        layerControlContainer.addEventListener('click', (e) => {
+                            const styleIcon = e.target.closest('.layer-style-icon');
+                            if (styleIcon && styleIcon.dataset.layerName) {
+                                callbacks.onStyleIconClick(styleIcon.dataset.layerName);
+                            }
+                        });
+                    }
+                    // Search listeners
+                    document.getElementById('search-input').addEventListener('input', callbacks.onSearch);
+                    document.getElementById('search-field').addEventListener('change', callbacks.onSearchFieldChange);
+                    // Dashboard Listeners
+                    document.getElementById('back-to-map-btn').addEventListener('click', callbacks.onBackToMapClick);
+                    document.getElementById('generate-chart-btn').addEventListener('click', callbacks.onGenerateChartClick);
+                    document.getElementById('segment-select').addEventListener('change', callbacks.onSegmentChange);
+                    // Initialize all modals
+                    document.querySelectorAll('.fixed.inset-0').forEach(modal => {
+                        modal.querySelector('.modal-close')?.addEventListener('click', () => closeModal(modal));
+                        modal.addEventListener('click', (e) => { if (e.target === modal) { closeModal(modal); } });
+                    });
+                    // Delegated event listeners for the right sidebar
+                    rightSidebar.addEventListener('click', (e) => {
+                        const infoPanel = rightSidebar.querySelector('#info-panel');
+                        // Handle close button click
+                        if (e.target.closest('#info-panel-close')) {
+                            rightSidebar.classList.remove('active');
+                            MapView.resizeMap();
+                            return;
+                        }
+                        // MODIFIED: Added listeners for all navigation types
+                        if (e.target.closest('#info-panel-next')) {
+                            callbacks.onNextInFilterClick();
+                            return;
+                        }
+                        if (e.target.closest('#info-panel-prev')) {
+                            callbacks.onPreviousInFilterClick();
+                            return;
+                        }
+                        // MODIFIED: Added listener for the new "Next Unchecked" button
+                        if (e.target.closest('#info-panel-next-unchecked')) {
+                            callbacks.onNextUncheckedClick();
+                            return;
+                        }
+                        // Handle RAG status button click
+                        const ragButton = e.target.closest('.rag-button');
+                        if (ragButton && infoPanel && infoPanel.dataset.pointId) {
+                            callbacks.onStatusChange(infoPanel.dataset.pointId, ragButton.dataset.status);
+                        }
+                    });
+                    rightSidebar.addEventListener('change', (e) => {
+                        // Handle changes to editable form inputs (both input and textarea)
+                        const input = e.target.closest('.form-input[data-point-id]');
+                        if (input) {
+                            callbacks.onFieldChange(input.dataset.pointId, input.dataset.recordIndex, input.dataset.key, input.value);
+                        }
+                    });
+                    
+                    // Check if tour should be shown
+                    if (!localStorage.getItem('tourCompleted')) {
+                        document.getElementById('onboarding-tour').classList.remove('hidden');
+                    }
+                },
+                showLayerSelectModal: (layerNames, callback) => {
+                    const modal = document.getElementById('layer-select-modal');
+                    const body = document.getElementById('layer-select-body');
+                    body.innerHTML = `
+                        <p class="text-slate-600 mb-4">Multiple GeoJSON layers are loaded. Please select one for the distance calculation.</p>
+                        <div class="space-y-2">
+                            ${layerNames.map((name, index) => `
+                                <label for="layer-radio-${index}" class="flex items-center p-3 rounded-md border border-slate-200 hover:bg-slate-50 cursor-pointer">
+                                    <input type="radio" id="layer-radio-${index}" name="layer-select" value="${name}" class="form-radio h-4 w-4 text-indigo-600 focus:ring-indigo-500" ${index === 0 ? 'checked' : ''}>
+                                    <span class="ml-3 text-sm font-medium text-slate-700">${name}</span>
+                                </label>
+                            `).join('')}
+                        </div>`;
+                    document.getElementById('layer-select-confirm').onclick = () => {
+                        const selected = body.querySelector('input[name="layer-select"]:checked');
+                        if (selected) {
+                            callback(selected.value);
+                            closeModal(modal);
+                        } else {
+                            UIController.showToast("Please select a layer.", "error");
+                        }
+                    };
+                    showModal(modal);
+                },
+                showValidationConfirmModal: (callback) => {
+                    const modal = document.getElementById('validation-confirm-modal');
+                    document.getElementById('validation-confirm-yes').onclick = () => { callback(true); closeModal(modal); };
+                    document.getElementById('validation-confirm-no').onclick = () => { callback(false); closeModal(modal); };
+                    showModal(modal);
+                },
+                showThresholdModal: (callback) => {
+                    const modal = document.getElementById('threshold-modal');
+                    const greenInput = document.getElementById('threshold-green');
+                    const amberInput = document.getElementById('threshold-amber');
+                    greenInput.value = '';
+                    amberInput.value = '';
+                    document.getElementById('threshold-apply').onclick = () => {
+                        const green = parseFloat(greenInput.value);
+                        const amber = parseFloat(amberInput.value);
+                        if (isNaN(green) || isNaN(amber)) { UIController.showToast("Please enter valid numbers for thresholds.", "error"); return; }
+                        if (green <= 0 || amber <= 0) { UIController.showToast("Threshold values must be positive.", "error"); return; }
+                        if (green >= amber) { UIController.showToast("Green threshold must be less than Amber threshold.", "error"); return; }
+                        
+                        callback({ green, amber });
+                        closeModal(modal);
+                    };
+                    showModal(modal);
+                },
+                // ADDED: Configuration Confirmation Modal
+                showConfigConfirmModal: (callbacks) => {
+                    const modal = document.getElementById('config-confirm-modal');
+                    document.getElementById('config-confirm-yes').onclick = () => {
+                        callbacks.onConfirm();
+                        closeModal(modal);
+                    };
+                    document.getElementById('config-confirm-no').onclick = () => {
+                        callbacks.onDecline();
+                        closeModal(modal);
+                    };
+                    showModal(modal);
+                },
+                updateDistanceButtonState: () => {
+                    const hasPoints = State.getPoints().length > 0;
+                    const hasGeoJson = State.hasGeoJsonData();
+                    distanceButton.disabled = !(hasPoints && hasGeoJson);
+                },
+                toggleDashboardView: (show) => {
+                    if (show) {
+                        dashboardView.classList.remove('hidden');
+                    } else {
+                        dashboardView.classList.add('hidden');
+                    }
+                },
+                setupDashboardControls: (columnNames) => {
+                    const dimensionSelect = document.getElementById('dimension-select');
+                    const segmentSelect = document.getElementById('segment-select');
+                    dimensionSelect.innerHTML = '';
+                    segmentSelect.innerHTML = '<option value="none">(None)</option>';
+                    columnNames.forEach(name => {
+                        const option1 = document.createElement('option');
+                        option1.value = name;
+                        option1.textContent = name;
+                        dimensionSelect.appendChild(option1);
+                        const option2 = document.createElement('option');
+                        option2.value = name;
+                        option2.textContent = name;
+                        segmentSelect.appendChild(option2);
+                    });
+                    UIController.updateChartTypeOptions();
+                },
+                updateChartTypeOptions: () => {
+                    const segmentSelect = document.getElementById('segment-select');
+                    const chartTypeSelect = document.getElementById('chart-type-select');
+                    const isSegmented = segmentSelect.value !== 'none';
+                    if (isSegmented) {
+                        chartTypeSelect.innerHTML = `
+                            <option value="stacked-bar">Stacked Bar</option>
+                            <option value="bar">Grouped Bar</option>
+                        `;
+                    } else {
+                        chartTypeSelect.innerHTML = `
+                            <option value="bar">Bar</option>
+                            <option value="pie">Pie</option>
+                            <option value="doughnut">Doughnut</option>
+                        `;
+                    }
+                },
+                addChartToGrid: (dimensionCol, segmentCol, chartType) => {
+                    const grid = document.getElementById('chart-grid');
+                    const chartId = `chart-canvas-${chartIdCounter++}`;
+                    const card = document.createElement('div');
+                    card.className = 'bg-white rounded-lg shadow-md p-4 flex flex-col transition-all hover:shadow-xl hover:-translate-y-1';
+                    
+                    let title = `Count of ${dimensionCol}`;
+                    if(segmentCol !== 'none') { title += ` by ${segmentCol}`; }
+                    card.innerHTML = `
+                        <div class="flex justify-between items-center mb-3 pb-3 border-b border-slate-200">
+                            <h3 class="font-bold text-slate-700 text-sm">${title}</h3>
+                            <button class="remove-chart-btn p-1 rounded-full hover:bg-red-100 text-slate-500 hover:text-red-600" title="Remove Chart"><i data-lucide="x" class="w-4 h-4"></i></button>
+                        </div>
+                        <div class="flex-grow min-h-[300px] relative">
+                            <canvas id="${chartId}"></canvas>
+                        </div>`;
+                    
+                    grid.appendChild(card);
+                    lucide.createIcons();
+                    
+                    const canvas = document.getElementById(chartId);
+                    AnalyticsController.createChart(canvas, State.getRawLocationData(), dimensionCol, segmentCol, chartType);
+                    
+                    card.querySelector('.remove-chart-btn').addEventListener('click', () => {
+                        AnalyticsController.removeChart(chartId);
+                        card.remove();
+                    });
+                },
+                clearChartGrid: () => {
+                    document.getElementById('chart-grid').innerHTML = '';
+                    AnalyticsController.clearAllCharts();
+                },
+                showStyleEditor: (layerName, currentStyle, onApply) => {
+                    const modal = document.getElementById('style-editor-modal');
+                    document.getElementById('style-editor-title').textContent = `Style: ${layerName}`;
+                    const body = document.getElementById('style-editor-body');
+                    
+                    body.innerHTML = `
+                        <div class="style-control flex items-center justify-between">
+                            <label for="layer-color-picker" class="font-medium text-slate-700">Color:</label>
+                            <input type="color" id="layer-color-picker" value="${currentStyle.color || '#f97316'}" class="w-24 h-10 p-1 border border-slate-300 rounded-md cursor-pointer">
+                        </div>
+                        <div class="style-control space-y-2">
+                            <label for="layer-opacity-slider" class="font-medium text-slate-700">Opacity: <span id="opacity-value">${currentStyle.fillOpacity}</span></label>
+                            <input type="range" id="layer-opacity-slider" min="0" max="1" step="0.1" value="${currentStyle.fillOpacity}" class="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer">
+                        </div>
+                        <button id="apply-style-button" class="action-button w-full bg-indigo-600 text-white">Apply Style</button>
+                    `;
+                    const opacitySlider = body.querySelector('#layer-opacity-slider');
+                    const opacityValue = body.querySelector('#opacity-value');
+                    opacitySlider.addEventListener('input', () => opacityValue.textContent = opacitySlider.value);
+                    body.querySelector('#apply-style-button').onclick = () => {
+                        const newOpacity = parseFloat(opacitySlider.value);
+                        const newColor = body.querySelector('#layer-color-picker').value;
+                        onApply(layerName, { color: newColor, opacity: 1, fillOpacity: newOpacity, weight: currentStyle.weight || 2 });
+                        closeModal(modal);
+                    };
+                    showModal(modal);
+                },
+                showFieldConfigModal: (columnNames, currentConfig, onSave) => {
+                    const modal = document.getElementById('field-config-modal');
+                    const body = document.getElementById('field-config-body');
+                    body.innerHTML = `
+                        <div class="grid grid-cols-[1fr_auto_auto] gap-x-4 items-center mb-2 pb-2 border-b font-semibold text-sm text-slate-500">
+                            <span>Field Name</span>
+                            <div class="text-center">Display</div>
+                            <div class="text-center">Editable</div>
+                        </div>
+                        <div class="space-y-2 max-h-96 overflow-y-auto pr-2">
+                        ${columnNames.map(name => {
+                            const isProtected = ['lat', 'latitude', 'lon', 'long', 'longitude', 'validation_status'].includes(name.toLowerCase().trim());
+                            const current = currentConfig[name];
+                            return `
+                            <div class="field-config-row grid grid-cols-[1fr_auto_auto] gap-x-4 items-center p-2 rounded-md hover:bg-slate-50">
+                                <span class="font-medium text-slate-700 truncate">${name}</span>
+                                <label class="flex justify-center"><input type="checkbox" class="display-check form-checkbox" data-name="${name}" ${current.display ? 'checked' : ''} ${isProtected ? 'disabled' : ''}></label>
+                                <label class="flex justify-center"><input type="checkbox" class="edit-check form-checkbox" data-name="${name}" ${current.editable ? 'checked' : ''} ${isProtected || !current.display ? 'disabled' : ''}></label>
+                            </div>`;
+                        }).join('')}
+                        </div>`;
+                    
+                    const autoSaveConfig = () => {
+                        const newConfig = {};
+                        body.querySelectorAll('.display-check').forEach(cb => {
+                            const name = cb.dataset.name;
+                            if (!newConfig[name]) newConfig[name] = { display: false, editable: false };
+                            newConfig[name].display = cb.checked;
+                        });
+                        body.querySelectorAll('.edit-check').forEach(cb => {
+                            const name = cb.dataset.name;
+                            if (!newConfig[name]) newConfig[name] = { display: false, editable: false };
+                            if(newConfig[name].display) newConfig[name].editable = cb.checked;
+                            else newConfig[name].editable = false;
+                        });
+                        onSave(newConfig);
+                    };
+                    body.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
+                        checkbox.addEventListener('change', () => {
+                            if (checkbox.classList.contains('display-check')) {
+                                const editCb = body.querySelector(`.edit-check[data-name="${checkbox.dataset.name}"]`);
+                                if (!checkbox.checked) { editCb.checked = false; editCb.disabled = true; } 
+                                else if(!editCb.hasAttribute('disabled')) { editCb.disabled = false; }
+                            }
+                            autoSaveConfig();
+                        });
+                    });
+                    showModal(modal);
+                },
+                showInfoPanel: (point) => {
+                    rightSidebar.innerHTML = ''; // Clear previous content
+                    rightSidebar.classList.add('active');
+                    MapView.resizeMap();
+                    const fieldConfig = State.getFieldConfig();
+                    
+                    const currentFilter = State.getCurrentFilter();
+                    const isFilterActive = currentFilter !== 'All' && currentFilter !== 'Unvalidated';
+                    const pointsInFilter = State.getPoints().filter(p => p.ragStatus === currentFilter).length;
+
+                    const navigationControls = isFilterActive && pointsInFilter > 1 ? `
+                        <div class="flex items-center gap-2">
+                            <button id="info-panel-prev" title="Previous in category" class="p-1 rounded-full hover:bg-slate-200 text-slate-600">
+                                <i data-lucide="arrow-left" class="w-4 h-4"></i>
+                            </button>
+                            <button id="info-panel-next" title="Next in category" class="p-1 rounded-full hover:bg-slate-200 text-slate-600">
+                                <i data-lucide="arrow-right" class="w-4 h-4"></i>
+                            </button>
+                        </div>
+                    ` : '';
+
+                    const unvalidatedPointsCount = State.getPoints().filter(p => p.ragStatus === 'Unvalidated').length;
+                    const nextUncheckedButton = (point.ragStatus === 'Unvalidated' && unvalidatedPointsCount > 1) ? `
+                        <button id="info-panel-next-unchecked" class="action-button w-full bg-blue-600 text-white">
+                            <i data-lucide="skip-forward"></i><span>Go to Next Unchecked</span>
+                        </button>
+                    ` : '';
+
+                    const renderField = (key, value, recordIndex) => {
+                        if (fieldConfig && fieldConfig[key] && fieldConfig[key].display) {
+                            let fieldHtml = `<div class="mb-3">`;
+                            fieldHtml += `<label class="text-xs font-semibold text-slate-500">${key}</label>`;
+                            if (fieldConfig[key].editable) {
+                                if (key.toLowerCase().includes('comment')) {
+                                     fieldHtml += `<textarea class="form-input w-full mt-1 text-sm" rows="3" data-point-id="${point.id}" data-record-index="${recordIndex}" data-key="${key}">${value}</textarea>`;
+                                } else {
+                                     fieldHtml += `<input type="text" class="form-input w-full mt-1 text-sm" value="${value}" data-point-id="${point.id}" data-record-index="${recordIndex}" data-key="${key}">`;
+                                }
+                            } else {
+                                fieldHtml += `<p class="w-full mt-1 text-sm text-slate-800 bg-slate-50 p-2 rounded-md break-words min-h-[38px]">${value}</p>`;
+                            }
+                            fieldHtml += `</div>`;
+                            return fieldHtml;
+                        }
+                        return '';
+                    };
+                    
+                    let dataHtml = '';
+                    if (point.originalData.length > 1) {
+                        point.originalData.forEach((rowData, index) => {
+                            dataHtml += `<div class="mt-4"><div class="font-bold bg-slate-100 p-2 rounded-md text-sm text-slate-600">Record ${index + 1} of ${point.originalData.length}</div><div class="p-2">`;
+                            for (const [key, value] of Object.entries(rowData)) {
+                                dataHtml += renderField(key, value, index);
+                            }
+                            dataHtml += `</div></div>`;
+                        });
+                    } else {
+                        dataHtml += `<div class="mt-4">`;
+                        for (const [key, value] of Object.entries(point.originalData[0])) {
+                            dataHtml += renderField(key, value, 0);
+                        }
+                        dataHtml += `</div>`;
+                    }
+                    
+                    const title = point.originalData.length > 1 ? `Location Details (${point.originalData.length} records)` : 'Point Details';
+                    
+                    const panelContainer = document.createElement('div');
+                    panelContainer.id = 'info-panel';
+                    panelContainer.className = 'w-full h-full flex flex-col';
+                    panelContainer.dataset.pointId = point.id;
+                    panelContainer.innerHTML = `
+                        <div class="p-4 border-b border-slate-200 flex justify-between items-center flex-shrink-0">
+                            <h3 class="font-bold text-slate-800">${title}</h3>
+                            <div class="flex items-center gap-4">
+                                ${navigationControls}
+                                <button id="info-panel-close" title="Close" class="p-1 rounded-full hover:bg-slate-100"><i data-lucide="x" class="w-5 h-5 text-slate-500"></i></button>
+                            </div>
+                        </div>
+                        <div class="p-4 text-sm overflow-y-auto flex-grow">
+                            ${dataHtml}
+                        </div>
+                        <div class="p-4 border-t border-slate-200 flex-shrink-0">
+                            ${nextUncheckedButton}
+                            <div class="rag-selector grid grid-cols-2 gap-2 ${nextUncheckedButton ? 'mt-4' : ''}">
+                                <button class="rag-button flex items-center justify-center gap-2 rounded-md p-2 bg-emerald-500 border-emerald-500 text-white ${point.ragStatus === 'Green' ? 'ring-2 ring-offset-2 ring-emerald-500' : ''}" data-status="Green"><i data-lucide="shield-check"></i>Green</button>
+                                <button class="rag-button flex items-center justify-center gap-2 rounded-md p-2 bg-amber-500 border-amber-500 text-white ${point.ragStatus === 'Amber' ? 'ring-2 ring-offset-2 ring-amber-500' : ''}" data-status="Amber"><i data-lucide="shield-alert"></i>Amber</button>
+                                <button class="rag-button flex items-center justify-center gap-2 rounded-md p-2 bg-red-500 border-red-500 text-white ${point.ragStatus === 'Red' ? 'ring-2 ring-offset-2 ring-red-500' : ''}" data-status="Red"><i data-lucide="shield-x"></i>Red</button>
+                                <button class="rag-button flex items-center justify-center gap-2 rounded-md p-2 bg-slate-500 border-slate-500 text-white ${point.ragStatus === 'Not Required' ? 'ring-2 ring-offset-2 ring-slate-500' : ''}" data-status="Not Required"><i data-lucide="slash"></i>Not Required</button>
+                            </div>
+                        </div>`;
+                    
+                    rightSidebar.appendChild(panelContainer);
+                    try {
+                        lucide.createIcons();
+                    } catch (e) {
+                        console.error("Lucide icons failed to render.", e);
+                    }
+                },
+                updateInfoPanelStatus: (newStatus) => {
+                    const infoPanel = rightSidebar.querySelector('#info-panel');
+                    if (!infoPanel) return;
+                    const selector = infoPanel.querySelector('.rag-selector');
+                    if (!selector) return;
+                    selector.querySelectorAll('.rag-button').forEach(btn => btn.classList.remove('ring-2', 'ring-offset-2', 'ring-emerald-500', 'ring-amber-500', 'ring-red-500', 'ring-slate-500'));
+                    const selectedBtn = selector.querySelector(`[data-status="${newStatus}"]`);
+                    if(selectedBtn) {
+                        const ringColor = selectedBtn.classList.contains('bg-emerald-500') ? 'ring-emerald-500' :
+                                          selectedBtn.classList.contains('bg-amber-500') ? 'ring-amber-500' :
+                                          selectedBtn.classList.contains('bg-red-500') ? 'ring-red-500' : 'ring-slate-500';
+                        selectedBtn.classList.add('ring-2', 'ring-offset-2', ringColor);
+                    }
+                },
+                updateStatsPanel: () => {
+                    const points = State.getPoints();
+                    const currentFilter = State.getCurrentFilter();
+                    if (points.length === 0) { statsPanel.innerHTML = '<p class="text-sm text-slate-500 text-center">Load data to see summary.</p>'; return; }
+                    
+                    const stats = {
+                        totalOriginalPoints: points.reduce((sum, p) => sum + p.originalData.length, 0),
+                        totalLocations: points.length,
+                        Unvalidated: points.filter(p => p.ragStatus === 'Unvalidated').length,
+                        Green: points.filter(p => p.ragStatus === 'Green').length,
+                        Amber: points.filter(p => p.ragStatus === 'Amber').length,
+                        Red: points.filter(p => p.ragStatus === 'Red').length,
+                        'Not Required': points.filter(p => p.ragStatus === 'Not Required').length
+                    };
+                    
+                    const statItem = (label, value, status, colorClass) => `
+                        <div class="stats-row flex justify-between items-center p-2 rounded-md cursor-pointer ${currentFilter === status ? 'bg-indigo-100' : 'hover:bg-slate-50'}" data-status="${status}">
+                            <span class="text-sm font-medium text-slate-600">${label}</span>
+                            <span class="px-2 py-0.5 text-xs font-bold text-white rounded-full ${colorClass}">${value}</span>
+                        </div>`;
+                    
+                    // MODIFIED: Removed the "Go to Next Unchecked" button from this panel.
+                    statsPanel.innerHTML = `
+                        <h3 class="text-sm font-bold text-slate-600 mb-2">Validation Summary</h3>
+                        <div class="space-y-1">
+                            ${statItem('Total Points', stats.totalOriginalPoints, 'All', 'bg-slate-700')}
+                            ${statItem('Unique Locations', stats.totalLocations, 'All', 'bg-slate-700')}
+                            ${statItem('Remaining', stats.Unvalidated, 'Unvalidated', 'bg-blue-500')}
+                            ${statItem('Green', stats.Green, 'Green', 'bg-emerald-500')}
+                            ${statItem('Amber', stats.Amber, 'Amber', 'bg-amber-500')}
+                            ${statItem('Red', stats.Red, 'Red', 'bg-red-500')}
+                            ${statItem('Not Required', stats['Not Required'], 'bg-slate-500')}
+                        </div>
+                        ${stats.Unvalidated === 0 ? '<p class="text-center mt-3 font-semibold text-emerald-600">All locations validated!</p>' : ''}`;
+                },
+                updateSearchFields: (fieldNames) => {
+                    const searchField = document.getElementById('search-field');
+                    const searchInput = document.getElementById('search-input');
+                    searchField.innerHTML = '';
+                    fieldNames.forEach(name => {
+                        const option = document.createElement('option');
+                        option.value = name;
+                        option.textContent = name;
+                        searchField.appendChild(option);
+                    });
+                    searchField.disabled = false;
+                    searchInput.disabled = false;
+                    UIController.updateSearchSuggestions(fieldNames[0]);
+                },
+                updateSearchSuggestions: (fieldName) => {
+                    const datalist = document.getElementById('search-suggestions');
+                    datalist.innerHTML = '';
+                    const rawData = State.getRawLocationData();
+                    if (!rawData) return;
+                    const uniqueValues = new Set(rawData.map(row => row[fieldName]).filter(Boolean));
+                    uniqueValues.forEach(value => {
+                        const option = document.createElement('option');
+                        option.value = value;
+                        datalist.appendChild(option);
+                    });
+                },
+                showLoader: (text = 'Loading...', progress = null) => { 
+                    loaderText.textContent = text; 
+                    if (progress !== null) {
+                        progressContainer.classList.remove('hidden');
+                        progressBar.style.width = `${progress}%`;
+                        progressText.textContent = progress;
+                    } else {
+                        progressContainer.classList.add('hidden');
+                    }
+                    loader.classList.remove('hidden'); 
+                },
+                updateLoaderProgress: (progress) => {
+                    if (progressContainer.classList.contains('hidden')) {
+                        progressContainer.classList.remove('hidden');
+                    }
+                    progressBar.style.width = `${progress}%`;
+                    progressText.textContent = progress;
+                },
+                hideLoader: () => { 
+                    loader.classList.add('hidden');
+                    progressContainer.classList.add('hidden');
+                },
+                showToast: (message, type = 'info') => {
+                    const container = document.getElementById('toast-container');
+                    const toast = document.createElement('div');
+                    const id = `toast-${Date.now()}`;
+                    
+                    const icons = {
+                        success: 'check-circle',
+                        error: 'x-circle',
+                        warning: 'alert-triangle',
+                        info: 'info'
+                    };
+                    
+                    const colors = {
+                        success: 'bg-emerald-500',
+                        error: 'bg-red-500',
+                        warning: 'bg-amber-500',
+                        info: 'bg-blue-500'
+                    };
+                    
+                    toast.id = id;
+                    toast.className = `flex items-center space-x-3 p-4 rounded-lg shadow-lg text-white ${colors[type]} transform translate-x-full opacity-0 transition-all duration-300 max-w-md`;
+                    toast.innerHTML = `
+                        <i data-lucide="${icons[type]}" class="flex-shrink-0 w-5 h-5"></i>
+                        <div class="flex-1">
+                            <p class="font-medium text-sm">${message}</p>
+                        </div>
+                        <button class="toast-close flex-shrink-0 text-white hover:text-slate-200" data-toast-id="${id}">
+                            <i data-lucide="x" class="w-4 h-4"></i>
+                        </button>
+                    `;
+                    
+                    container.appendChild(toast);
+                    lucide.createIcons();
+                    
+                    // Animate in
+                    setTimeout(() => toast.classList.remove('translate-x-full', 'opacity-0'), 10);
+                    
+                    // Add close functionality
+                    toast.querySelector('.toast-close').addEventListener('click', () => {
+                        toast.classList.add('translate-x-full', 'opacity-0');
+                        setTimeout(() => toast.remove(), 300);
+                    });
+                    
+                    // Auto-remove after 5 seconds
+                    setTimeout(() => {
+                        if (document.getElementById(id)) {
+                            toast.classList.add('translate-x-full', 'opacity-0');
+                            setTimeout(() => toast.remove(), 300);
+                        }
+                    }, 5000);
+                }
+            };
+        })();
+        
+        // --- Gemini AI Analyzer ---
+        const GeminiAnalyzer = (() => {
+            const modal = document.getElementById('analysis-modal');
+            const resultDiv = document.getElementById('analysis-result');
+            
+            const captureMapImage = async () => {
+                const mapContainer = document.getElementById('map');
+                const canvas = await html2canvas(mapContainer, { useCORS: true });
+                return canvas.toDataURL('image/png').split(',')[1];
+            };
+            return {
+                analyzeView: async (map) => {
+                    resultDiv.innerHTML = '<p>Capturing map and preparing analysis...</p>';
+                    UIController.showModal(modal);
+                    
+                    try {
+                        const base64ImageData = await captureMapImage();
+                        const bounds = map.getBounds();
+                        const prompt = `You are an expert GIS analyst. Analyze the provided map image. The visible area is approximately bounded by:
+                        Northeast: (${bounds.getNorthEast().lat.toFixed(4)}, ${bounds.getNorthEast().lng.toFixed(4)})
+                        Southwest: (${bounds.getSouthWest().lat.toFixed(4)}, ${bounds.getSouthWest().lng.toFixed(4)}).
+                        Provide a summary for a site suitability report. Describe the terrain (e.g., mountainous, flat, coastal), identify potential watershed features like rivers, valleys, or peaks. Based on the topography, suggest potential risks (e.g., steep slopes indicating landslide risk, low-lying areas for flood risk) and potential advantages (e.g., gentle slopes for construction, high points for communication towers). Format your response using Markdown.`;
+                        const payload = {
+                            contents: [{ role: "user", parts: [ { text: prompt }, { inlineData: { mimeType: "image/png", data: base64ImageData } } ] }],
+                        };
+                        
+                        resultDiv.innerHTML = '<p>Contacting Gemini AI... this may take a moment.</p>';
+                        const apiKey = "";
+                        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
+                        const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                        if (!response.ok) throw new Error(`API request failed with status ${response.status}`);
+                        const result = await response.json();
+                        
+                        if (result.candidates && result.candidates.length > 0 && result.candidates[0].content.parts[0].text) {
+                            let text = result.candidates[0].content.parts[0].text;
+                            // Basic markdown to HTML conversion
+                            text = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+                            text = text.replace(/\*(.*?)\*/g, '<em>$1</em>');
+                            text = text.replace(/(\n\s*-\s)/g, '<br> &bull; ');
+                            text = text.replace(/\n/g, '<br>');
+                            resultDiv.innerHTML = text;
+                        } else { throw new Error("Invalid response structure from API."); }
+                    } catch (error) {
+                        console.error("Gemini analysis failed:", error);
+                        resultDiv.innerHTML = `<p class="text-red-500"><strong>Analysis Failed:</strong> ${error.message}.</p>`;
+                    }
+                }
+            };
+        })();
+        
+        // --- Main App Logic ---
+        document.addEventListener('DOMContentLoaded', () => {
+            lucide.createIcons();
+            const map = MapView.initializeMap();
+            
+            // Keyboard navigation support
+            document.addEventListener('keydown', (e) => {
+                // Escape key to close modals and sidebars
+                if (e.key === 'Escape') {
+                    // Close any open modals
+                    document.querySelectorAll('.fixed.inset-0:not(.hidden)').forEach(modal => {
+                        if (modal.id !== 'loader') {
+                            modal.querySelector('.modal-close')?.click();
+                        }
+                    });
+                    
+                    // Close right sidebar if open
+                    const rightSidebar = document.getElementById('right-sidebar');
+                    if (rightSidebar.classList.contains('active')) {
+                        rightSidebar.classList.remove('active');
+                        MapView.resizeMap();
+                    }
+                }
+                
+                // Keyboard shortcuts for common actions
+                if (e.ctrlKey || e.metaKey) {
+                    switch(e.key) {
+                        case 'o': // Ctrl/Cmd + O to open file
+                            e.preventDefault();
+                            document.getElementById('location-file-input').click();
+                            break;
+                        case 's': // Ctrl/Cmd + S to save/export
+                            e.preventDefault();
+                            document.getElementById('export-csv').click();
+                            break;
+                        case 'f': // Ctrl/Cmd + F to focus search
+                            e.preventDefault();
+                            document.getElementById('search-input').focus();
+                            break;
+                    }
+                }
+            });
+            
+            const onMarkerClick = (pointId) => {
+                State.setCurrentIndexById(pointId);
+                const point = State.getPointById(pointId);
+                if (point) { 
+                    MapView.setSelectedMarker(point); 
+                    UIController.showInfoPanel(point); 
+                }
+            };
+            const onStatusChange = (pointId, newStatus) => {
+                State.updatePointStatus(pointId, newStatus);
+                const point = State.getPointById(pointId);
+                if (point && point.mapMarker) { MapView.updateMarker(point.mapMarker, newStatus, true, point.originalData.length); }
+                UIController.updateInfoPanelStatus(newStatus);
+                UIController.updateStatsPanel();
+            };
+            const onFieldChange = (pointId, recordIndex, key, value) => {
+                State.updatePointData(pointId, recordIndex, key, value);
+                UIController.showToast("Data updated.", "success");
+            };
+            const onExportClick = () => {
+                const points = State.getPoints();
+                if (points.length === 0) { UIController.showToast("No data to export.", "error"); return; }
+                Exporter.exportToCSV(points);
+                UIController.showToast("Report exported successfully!", "success");
+            };
+
+            const onLocationFileSelect = (file) => {
+                State.setLocationFile(file);
+                document.getElementById('plot-button').disabled = true;
+                UIController.showLoader('Reading location file...');
+                const reader = new FileReader();
+                const fileExtension = file.name.split('.').pop().toLowerCase();
+
+                reader.onload = (e) => {
+                    try {
+                        let json;
+                        if (fileExtension === 'csv') {
+                            const result = Papa.parse(e.target.result, { header: true, skipEmptyLines: true });
+                            if (result.errors.length > 0) {
+                                console.error("CSV Parsing errors:", result.errors);
+                                const firstError = result.errors[0];
+                                throw new Error(`CSV Parsing Error: ${firstError.message} on row ${firstError.row}.`);
+                            }
+                            json = result.data.filter(row => Object.values(row).some(val => val !== null && val !== ''));
+                        } else { // For .xlsx, .xls
+                            const workbook = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
+                            const sheetName = workbook.SheetNames[0];
+                            const worksheet = workbook.Sheets[sheetName];
+                            json = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
+                        }
+                        
+                        if (!json || json.length === 0) {
+                            throw new Error("No data found in the file or file is empty.");
+                        }
+
+                        State.setRawLocationData(json);
+                        const headers = Object.keys(json[0]);
+                        const configHeaders = [...headers];
+                        if (!configHeaders.includes('User_Comment')) configHeaders.push('User_Comment');
+                        
+                        const initialConfig = {};
+                        configHeaders.forEach(h => { initialConfig[h] = { display: true, editable: (h === 'User_Comment') } });
+                        State.setFieldConfig(initialConfig);
+                        
+                        document.getElementById('config-fields-button').classList.remove('hidden');
+                        
+                        UIController.updateSearchFields(headers);
+                        UIController.showToast("Location file loaded.", "success");
+                        document.getElementById('plot-button').disabled = false;
+                        UIController.showStepIndicator();
+
+                        UIController.showConfigConfirmModal({
+                            onConfirm: () => {
+                                onConfigFieldsClick(); 
+                            },
+                            onDecline: () => {
+                                onPlotClick();
+                            }
+                        });
+
+                    } catch (err) {
+                        console.error("File parsing error:", err);
+                        UIController.showToast(`Error: ${err.message}`, "error");
+                        State.setLocationFile(null);
+                        State.setRawLocationData(null);
+                        document.getElementById('plot-button').disabled = true;
+                        document.getElementById('config-fields-button').classList.add('hidden');
+                    } finally { 
+                        UIController.hideLoader(); 
+                    }
+                };
+
+                reader.onerror = () => { 
+                    UIController.showToast("Error reading file.", "error"); 
+                    UIController.hideLoader(); 
+                    document.getElementById('plot-button').disabled = true;
+                };
+
+                if (fileExtension === 'csv') {
+                    reader.readAsText(file);
+                } else if (['xlsx', 'xls'].includes(fileExtension)) {
+                    reader.readAsArrayBuffer(file);
+                } else {
+                    UIController.showToast("Unsupported file type.", "error");
+                    UIController.hideLoader();
+                    document.getElementById('plot-button').disabled = true;
+                }
+            };
+
+            const onGeoJsonFileSelect = (files) => {
+                for (const file of files) {
+                    UIController.showLoader(`Loading ${file.name}...`, 0);
+                    LazyMapLoader.loadGeoJsonLayer(map, file, (error, geoJsonData) => {
+                        UIController.hideLoader();
+                        if (error) {
+                            console.error("Error parsing GeoJSON file:", error);
+                            UIController.showToast(`Could not parse ${file.name}.`, 'error');
+                            return;
+                        }
+                        MapView.addGeoJsonLayer(map, geoJsonData, file.name);
+                    });
+                }
+            };
+            const onPlotClick = () => {
+                State.setCurrentFilter('All'); 
+                const rawData = State.getRawLocationData();
+                if (!rawData) { UIController.showToast("Location data is not ready.", "error"); return; }
+                UIController.showLoader('Processing points...');
+                setTimeout(() => { // Use timeout to allow loader to show
+                    const pointsData = DataParser.parseLocationData(rawData);
+                    if (pointsData && pointsData.length > 0) {
+                        State.setPoints(pointsData);
+                        MapView.plotPoints(map, State.getPoints(), onMarkerClick);
+                        UIController.updateStatsPanel();
+                        UIController.showToast(`${pointsData.length} unique locations plotted.`, "success");
+                        
+                        UIController.showStepIndicator();
+                    } else { UIController.showToast("No valid location data found to plot.", "error"); }
+                    UIController.hideLoader();
+                }, 50);
+            };
+            const onStatusFilterClick = (status) => {
+                // BUG FIX: Close the sidebar if it's open to prevent inconsistent state when changing filters.
+                const rightSidebar = document.getElementById('right-sidebar');
+                if (rightSidebar.classList.contains('active')) {
+                    rightSidebar.classList.remove('active');
+                    MapView.resizeMap();
+                }
+
+                State.setCurrentFilter(status);
+                const allPoints = State.getPoints();
+                const filteredPoints = status === 'All' ? allPoints : allPoints.filter(p => p.ragStatus === status);
+                MapView.plotPoints(map, filteredPoints, onMarkerClick);
+                UIController.updateStatsPanel();
+            };
+            const onNextUncheckedClick = () => {
+                if (State.getCurrentFilter() !== 'Unvalidated') {
+                    onStatusFilterClick('Unvalidated');
+                }
+                setTimeout(() => {
+                    const nextPoint = State.findNextUnvalidated();
+                    if (nextPoint) {
+                        // MODIFIED: Use new pan and zoom function
+                        MapView.panAndZoomToPoint(map, nextPoint);
+                        onMarkerClick(nextPoint.id);
+                    } else {
+                        UIController.showToast("All points have been validated!", "success");
+                    }
+                }, 100);
+            };
+            
+            // MODIFIED: Added pan and zoom to filter navigation
+            const onNextInFilterClick = () => {
+                const nextPoint = State.findNextInFilter();
+                if (nextPoint) {
+                    MapView.panAndZoomToPoint(map, nextPoint);
+                    onMarkerClick(nextPoint.id);
+                }
+            };
+
+            const onPreviousInFilterClick = () => {
+                const previousPoint = State.findPreviousInFilter();
+                if (previousPoint) {
+                    MapView.panAndZoomToPoint(map, previousPoint);
+                    onMarkerClick(previousPoint.id);
+                }
+            };
+
+            const debouncedSearch = debounce((query, field) => {
+                if (query.length < 2) return;
+                
+                const foundPoint = State.searchPoint(field, query);
+                if (foundPoint) {
+                    if (State.getCurrentFilter() !== 'All') { 
+                        onStatusFilterClick('All'); 
+                    }
+                    setTimeout(() => {
+                        // MODIFIED: Use new pan and zoom function
+                        MapView.panAndZoomToPoint(map, foundPoint);
+                        onMarkerClick(foundPoint.id);
+                        UIController.showToast(`Found and zoomed to point.`, "success");
+                    }, 100);
+                }
+            }, 300);
+            
+            const onSearch = (e) => {
+                const query = e.target.value;
+                const field = document.getElementById('search-field').value;
+                debouncedSearch(query, field);
+            };
+            
+            const onSearchFieldChange = (e) => {
+                UIController.updateSearchSuggestions(e.target.value);
+                document.getElementById('search-input').value = '';
+            };
+            const onAnalyzeClick = () => { GeminiAnalyzer.analyzeView(map); };
+            const onCalculateDistanceClick = () => { AnalysisController.startDistanceWorkflow(); };
+            const onInsightsClick = () => {
+                const rawData = State.getRawLocationData();
+                if (!rawData || rawData.length === 0) { UIController.showToast("Please load a location file first.", "error"); return; }
+                const columnNames = Object.keys(rawData[0]);
+                UIController.setupDashboardControls(columnNames);
+                UIController.toggleDashboardView(true);
+            };
+            const onBackToMapClick = () => {
+                UIController.toggleDashboardView(false);
+                UIController.clearChartGrid();
+            };
+            const onGenerateChartClick = () => {
+                const dimensionCol = document.getElementById('dimension-select').value;
+                const segmentCol = document.getElementById('segment-select').value;
+                const chartType = document.getElementById('chart-type-select').value;
+                UIController.addChartToGrid(dimensionCol, segmentCol, chartType);
+            };
+            const onSegmentChange = () => { UIController.updateChartTypeOptions(); };
+            const onStyleIconClick = (layerName) => {
+                const currentStyle = MapView.getGeoJsonLayerStyle(layerName);
+                if (currentStyle) {
+                    UIController.showStyleEditor(layerName, currentStyle, (name, style) => {
+                        MapView.updateGeoJsonStyle(name, style);
+                        const layer = MapView.getGeoJsonLayer(name);
+                        if (layer && !map.hasLayer(layer)) map.addLayer(layer);
+                    });
+                }
+            };
+            const onConfigFieldsClick = () => {
+                const fieldConfig = State.getFieldConfig();
+                if (fieldConfig) {
+                    const columnNames = Object.keys(fieldConfig);
+                    UIController.showFieldConfigModal(columnNames, fieldConfig, (newConfig) => {
+                        State.setFieldConfig(newConfig);
+                        const currentIndex = State.getCurrentIndex();
+                        if (currentIndex > -1) {
+                            const currentPoint = State.getPoints()[currentIndex];
+                            if(currentPoint) UIController.showInfoPanel(currentPoint);
+                        }
+                    });
+                } else {
+                    UIController.showToast("No location data loaded to configure.", "error");
+                }
+            };
+            // Event listener for when distance calculation finishes
+            document.addEventListener('distanceCalculated', () => {
+                const currentIndex = State.getCurrentIndex();
+                if (currentIndex > -1) {
+                    const currentPoint = State.getPoints()[currentIndex];
+                    if (currentPoint) { UIController.showInfoPanel(currentPoint); }
+                }
+                AnalysisController.startValidationWorkflow();
+            });
+            // Event listener for when validation is applied
+            document.addEventListener('validationApplied', () => {
+                MapView.plotPoints(map, State.getPoints(), onMarkerClick);
+                UIController.updateStatsPanel();
+            });
+            // Initialize UI with all callbacks
+            // MODIFIED: Added callbacks for the new navigation handlers
+            UIController.initializeUI({ 
+                onExportClick, onLocationFileSelect, onPlotClick, 
+                onNextUncheckedClick, onAnalyzeClick, onGeoJsonFileSelect, 
+                onStyleIconClick, onConfigFieldsClick, onStatusFilterClick, 
+                onInsightsClick, onBackToMapClick, onGenerateChartClick, onSegmentChange,
+                onSearch, onSearchFieldChange, onCalculateDistanceClick,
+                onStatusChange, onFieldChange,
+                onNextInFilterClick, onPreviousInFilterClick
+            });
+        });
+    </script>
+</body>
+</html>
