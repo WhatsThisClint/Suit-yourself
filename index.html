@@ -499,6 +499,9 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src='https://unpkg.com/@turf/turf@6/turf.min.js'></script>
+    <!-- ADDED: Libraries for client-side coordinate reprojection -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.11.0/proj4.js" xintegrity="sha512-4T79IOhAwx3j2T2/6zggPAqsYn2NseDe2gn192Tfl3fFj3x2f2jV5iVb2i2u/72E6+y/y5P2o3/yL1eHl3HQQ==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4leaflet/1.0.2/proj4leaflet.js" xintegrity="sha512-Y1e0sfLIs29GziSnL/5/12zY2o4L7sT32/f3lI23Sg+f350hH3vYnL2Jd0s1R1gG2/Fm0+k8vZe1Q==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
     <script type="module">
         // --- Tailwind Config ---
         tailwind.config = {
@@ -1067,9 +1070,30 @@
                 },
                 addGeoJsonLayer: (map, geoJsonData, layerName) => {
                     try {
-                        const defaultStyle = { color: "#f97316", weight: 2, opacity: 1, fillOpacity: 0.5 }; // orange-500
-                        const geoJsonLayer = L.geoJSON(geoJsonData, { style: defaultStyle });
-                        
+                        const defaultStyle = { color: "#f97316", weight: 2, opacity: 1, fillOpacity: 0.5 };
+                        let geoJsonLayer;
+
+                        // Check for a CRS and if it's one we need to reproject
+                        if (geoJsonData.crs && geoJsonData.crs.properties && geoJsonData.crs.properties.name) {
+                            const crsName = geoJsonData.crs.properties.name;
+                            if (crsName.includes('EPSG::32643')) {
+                                // Define the UTM Zone 43N projection using its Proj4 string
+                                const crs = new L.Proj.CRS('EPSG:32643',
+                                    '+proj=utm +zone=43 +datum=WGS84 +units=m +no_defs', {
+                                        resolutions: [16384, 8192, 4096, 2048, 1024, 512, 256] 
+                                    }
+                                );
+                                // Use L.Proj.geoJson to handle the reprojection
+                                geoJsonLayer = L.Proj.geoJson(geoJsonData, { style: defaultStyle });
+                                UIController.showToast(`Layer "${layerName}" reprojected from UTM Zone 43N.`, 'info');
+                            }
+                        }
+
+                        // If no special CRS was found or handled, use the standard Leaflet method
+                        if (!geoJsonLayer) {
+                            geoJsonLayer = L.geoJSON(geoJsonData, { style: defaultStyle });
+                        }
+
                         geojsonLayers.set(layerName, geoJsonLayer);
                         State.addGeoJsonData(layerName, geoJsonData);
                         layerControl.addOverlay(geoJsonLayer, layerName);
@@ -1080,7 +1104,7 @@
                         UIController.updateDistanceButtonState();
                     } catch (error) {
                         console.error("Error adding GeoJSON layer:", error);
-                        UIController.showToast(`Failed to add layer: ${layerName}`, 'error');
+                        UIController.showToast(`Failed to add layer: ${layerName}. Check console for details.`, 'error');
                     }
                 },
                 updateGeoJsonStyle: (layerName, newStyle) => {
@@ -1763,47 +1787,110 @@
         const GeminiAnalyzer = (() => {
             const modal = document.getElementById('analysis-modal');
             const resultDiv = document.getElementById('analysis-result');
+            let userApiKey = localStorage.getItem('geminiApiKey') || ""; // Persist API key
+            let lastUsedPrompt = "";
+            let lastUsedImageData = "";
             
             const captureMapImage = async () => {
                 const mapContainer = document.getElementById('map');
                 const canvas = await html2canvas(mapContainer, { useCORS: true });
-                return canvas.toDataURL('image/png').split(',')[1];
+                lastUsedImageData = canvas.toDataURL('image/png').split(',')[1];
+                return lastUsedImageData;
             };
+
+            // Function to show the form for API key and prompt
+            const renderErrorForm = (error) => {
+                resultDiv.innerHTML = `
+                    <div class="p-4 bg-red-50 border border-red-200 rounded-lg">
+                        <p class="font-bold text-red-700">Analysis Failed</p>
+                        <p class="text-sm text-red-600 mb-4">${error.message}. This might be due to a missing or invalid API key.</p>
+                    </div>
+                    <div class="space-y-4 mt-4">
+                        <div>
+                            <label for="api-key-input" class="block text-sm font-medium text-slate-700">Enter your Gemini API Key:</label>
+                            <input type="password" id="api-key-input" class="form-input w-full mt-1" value="${userApiKey}" placeholder="Enter your API key here">
+                        </div>
+                        <div>
+                            <label for="prompt-input" class="block text-sm font-medium text-slate-700">Analysis Prompt:</label>
+                            <textarea id="prompt-input" rows="8" class="form-input w-full mt-1">${lastUsedPrompt}</textarea>
+                        </div>
+                        <button id="retry-analysis-button" class="action-button w-full bg-indigo-600 text-white">
+                            <i data-lucide="refresh-cw"></i><span>Retry Analysis</span>
+                        </button>
+                    </div>`;
+                lucide.createIcons(); // Re-render icons for the new button
+
+                // Add event listener to the new retry button
+                document.getElementById('retry-analysis-button').addEventListener('click', () => {
+                    const newApiKey = document.getElementById('api-key-input').value;
+                    const newPrompt = document.getElementById('prompt-input').value;
+                    executeAnalysis(newApiKey, newPrompt, lastUsedImageData);
+                });
+            };
+
+            const executeAnalysis = async (apiKey, prompt, imageData) => {
+                try {
+                    userApiKey = apiKey; // Update the stored key
+                    lastUsedPrompt = prompt; // Update the last used prompt
+                    localStorage.setItem('geminiApiKey', userApiKey); // Save for future sessions
+
+                    resultDiv.innerHTML = '<div class="flex items-center justify-center p-8"><div class="w-8 h-8 border-4 border-slate-200 border-t-indigo-600 rounded-full animate-spin"></div><p class="ml-4 text-slate-600">Contacting Gemini AI...</p></div>';
+
+                    const payload = {
+                        contents: [{ role: "user", parts: [{ text: prompt }, { inlineData: { mimeType: "image/png", data: imageData } }] }],
+                    };
+                    
+                    const apiKeyParam = "" // This will be replaced by the runtime
+                    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${userApiKey || apiKeyParam}`;
+                    const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                    
+                    if (!response.ok) {
+                         const errorBody = await response.json();
+                         const errorMessage = errorBody?.error?.message || `API request failed with status ${response.status}`;
+                         throw new Error(errorMessage);
+                    }
+                    const result = await response.json();
+
+                    if (result.candidates && result.candidates.length > 0 && result.candidates[0].content.parts[0].text) {
+                        let text = result.candidates[0].content.parts[0].text;
+                        // Basic markdown to HTML conversion
+                        text = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+                        text = text.replace(/\*(.*?)\*/g, '<em>$1</em>');
+                        text = text.replace(/(\n\s*-\s)/g, '<br> &bull; ');
+                        text = text.replace(/\n/g, '<br>');
+                        resultDiv.innerHTML = text;
+                    } else { 
+                        const blockReason = result.candidates?.[0]?.finishReason;
+                        if(blockReason && blockReason !== "STOP"){
+                             throw new Error(`Analysis stopped by the API. Reason: ${blockReason}. Please adjust your prompt.`);
+                        }
+                        throw new Error("Invalid or empty response structure from API."); 
+                    }
+                } catch (error) {
+                    console.error("Gemini analysis failed:", error);
+                    renderErrorForm(error);
+                }
+            };
+
             return {
                 analyzeView: async (map) => {
-                    resultDiv.innerHTML = '<p>Capturing map and preparing analysis...</p>';
+                    resultDiv.innerHTML = '<div class="flex items-center justify-center p-8"><div class="w-8 h-8 border-4 border-slate-200 border-t-indigo-600 rounded-full animate-spin"></div><p class="ml-4 text-slate-600">Capturing map and preparing analysis...</p></div>';
                     UIController.showModal(modal);
-                    
+
                     try {
                         const base64ImageData = await captureMapImage();
                         const bounds = map.getBounds();
+                        
                         const prompt = `You are an expert GIS analyst. Analyze the provided map image. The visible area is approximately bounded by:
                         Northeast: (${bounds.getNorthEast().lat.toFixed(4)}, ${bounds.getNorthEast().lng.toFixed(4)})
                         Southwest: (${bounds.getSouthWest().lat.toFixed(4)}, ${bounds.getSouthWest().lng.toFixed(4)}).
                         Provide a summary for a site suitability report. Describe the terrain (e.g., mountainous, flat, coastal), identify potential watershed features like rivers, valleys, or peaks. Based on the topography, suggest potential risks (e.g., steep slopes indicating landslide risk, low-lying areas for flood risk) and potential advantages (e.g., gentle slopes for construction, high points for communication towers). Format your response using Markdown.`;
-                        const payload = {
-                            contents: [{ role: "user", parts: [ { text: prompt }, { inlineData: { mimeType: "image/png", data: base64ImageData } } ] }],
-                        };
                         
-                        resultDiv.innerHTML = '<p>Contacting Gemini AI... this may take a moment.</p>';
-                        const apiKey = "";
-                        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
-                        const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-                        if (!response.ok) throw new Error(`API request failed with status ${response.status}`);
-                        const result = await response.json();
-                        
-                        if (result.candidates && result.candidates.length > 0 && result.candidates[0].content.parts[0].text) {
-                            let text = result.candidates[0].content.parts[0].text;
-                            // Basic markdown to HTML conversion
-                            text = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-                            text = text.replace(/\*(.*?)\*/g, '<em>$1</em>');
-                            text = text.replace(/(\n\s*-\s)/g, '<br> &bull; ');
-                            text = text.replace(/\n/g, '<br>');
-                            resultDiv.innerHTML = text;
-                        } else { throw new Error("Invalid response structure from API."); }
+                        await executeAnalysis(userApiKey, prompt, base64ImageData);
+
                     } catch (error) {
-                        console.error("Gemini analysis failed:", error);
-                        resultDiv.innerHTML = `<p class="text-red-500"><strong>Analysis Failed:</strong> ${error.message}.</p>`;
+                        console.error("Map capture failed:", error);
+                        resultDiv.innerHTML = `<p class="text-red-500"><strong>Map Capture Failed:</strong> ${error.message}.</p>`;
                     }
                 }
             };
@@ -2142,3 +2229,4 @@
     </script>
 </body>
 </html>
+
